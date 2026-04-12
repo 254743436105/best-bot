@@ -1,0 +1,36 @@
+{
+  "name": "WhatsApp Personal Assistant Bot",
+  "description": "A personal assistant WhatsApp bot with reminders, weather, music, auto-status view and more.",
+  "keywords": ["whatsapp", "bot", "assistant", "nodejs"],
+  "env": {
+    "PREFIX": {
+      "description": "Command prefix (default is !)",
+      "value": "!",
+      "required": false
+    },
+    "TIMEZONE": {
+      "description": "Your timezone e.g. Africa/Nairobi",
+      "value": "Africa/Nairobi",
+      "required": false
+    },
+    "SESSION_DATA": {
+      "description": "Paste your base64 session here. Leave empty to scan QR code from logs on first run.",
+      "value": "",
+      "required": false
+    },
+    "HEROKU_APP_NAME": {
+      "description": "Your Heroku app name — enables auto session saving after reconnects.",
+      "required": false
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "buildpacks": [
+    { "url": "heroku/python" },
+    { "url": "heroku/nodejs" }
+  ]
+}
