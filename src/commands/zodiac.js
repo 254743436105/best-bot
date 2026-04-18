@@ -1,0 +1,20 @@
+module.exports = async (sock, msg, args, from) => {
+  if (!args[0]) return sock.sendMessage(from, { text: '⚠️ Usage: `!zodiac <DD/MM>`\nExample: `!zodiac 15/08`' });
+  const [day, month] = args[0].split('/').map(Number);
+  if (!day||!month) return sock.sendMessage(from, { text: '❌ Use format DD/MM' });
+  const signs = [{n:'Capricorn',e:'♑',d:'Dec 22 - Jan 19'},{n:'Aquarius',e:'♒',d:'Jan 20 - Feb 18'},{n:'Pisces',e:'♓',d:'Feb 19 - Mar 20'},{n:'Aries',e:'♈',d:'Mar 21 - Apr 19'},{n:'Taurus',e:'♉',d:'Apr 20 - May 20'},{n:'Gemini',e:'♊',d:'May 21 - Jun 20'},{n:'Cancer',e:'♋',d:'Jun 21 - Jul 22'},{n:'Leo',e:'♌',d:'Jul 23 - Aug 22'},{n:'Virgo',e:'♍',d:'Aug 23 - Sep 22'},{n:'Libra',e:'♎',d:'Sep 23 - Oct 22'},{n:'Scorpio',e:'♏',d:'Oct 23 - Nov 21'},{n:'Sagittarius',e:'♐',d:'Nov 22 - Dec 21'}];
+  const dates = [[1,19],[1,18],[2,18],[3,20],[4,19],[5,20],[6,20],[7,22],[8,22],[9,22],[10,22],[11,21]];
+  let sign = signs[0];
+  if (month===1&&day>=20) sign=signs[1];
+  else if (month===2&&day>=19) sign=signs[2];
+  else if (month===3&&day>=21) sign=signs[3];
+  else if (month===4&&day>=20) sign=signs[4];
+  else if (month===5&&day>=21) sign=signs[5];
+  else if (month===6&&day>=21) sign=signs[6];
+  else if (month===7&&day>=23) sign=signs[7];
+  else if (month===8&&day>=23) sign=signs[8];
+  else if (month===9&&day>=23) sign=signs[9];
+  else if (month===10&&day>=23) sign=signs[10];
+  else if (month===11&&day>=22) sign=signs[11];
+  await sock.sendMessage(from, { text: `${sign.e} *Zodiac Sign*\n\nDate: ${day}/${month}\nSign: *${sign.n} ${sign.e}*\nPeriod: ${sign.d}` });
+};
