@@ -1,35 +1,27 @@
-module.exports = async (sock, msg, args, from) => {
+async function execute(sock, msg, args, jid) {
   if (!args.length) {
-    return sock.sendMessage(from, {
-      text: '⚠️ Usage: `!calc <expression>`\nExamples:\n• `!calc 2 + 2`\n• `!calc 15% of 3000`\n• `!calc (100 * 5) / 2`',
-    });
+    return sock.sendMessage(jid, { text: '⚠️ Usage: !calc <expression>\nExample: !calc 15% of 3000' });
   }
 
-  let expr = args.join(' ');
+  let expr = args.join(' ').trim();
+
+  // Handle "X% of Y"
+  expr = expr.replace(/(\d+\.?\d*)%\s+of\s+(\d+\.?\d*)/i, (_, pct, base) =>
+    ((parseFloat(pct) / 100) * parseFloat(base)).toString()
+  );
+
+  // Allow only safe characters
+  if (!/^[\d\s\+\-\*\/\.\(\)%]+$/.test(expr)) {
+    return sock.sendMessage(jid, { text: '❌ Invalid expression.' });
+  }
 
   try {
-    // Handle "X% of Y" pattern
-    expr = expr.replace(/(\d+\.?\d*)%\s*of\s*(\d+\.?\d*)/gi, (_, pct, total) => {
-      return `(${pct} / 100) * ${total}`;
-    });
-
-    // Safely evaluate math expressions (no eval on arbitrary code)
-    const sanitized = expr.replace(/[^0-9+\-*/().\s%]/g, '');
-    if (!sanitized.trim()) throw new Error('Invalid expression');
-
-    // Use Function constructor limited to math
-    const result = Function(`"use strict"; return (${sanitized})`)();
-
-    if (!isFinite(result)) throw new Error('Result is not finite');
-
-    const formatted = Number.isInteger(result) ? result : parseFloat(result.toFixed(8));
-
-    await sock.sendMessage(from, {
-      text: `🧮 *Calculator*\n\n📥 Input: \`${args.join(' ')}\`\n📤 Result: *${formatted}*`,
-    });
-  } catch (err) {
-    await sock.sendMessage(from, {
-      text: `❌ Invalid expression: \`${args.join(' ')}\`\n\nTry: \`!calc 100 * 5 / 2\``,
-    });
+    // eslint-disable-next-line no-eval
+    const result = Function('"use strict"; return (' + expr + ')')();
+    await sock.sendMessage(jid, { text: `🧮 *Result:*\n${args.join(' ')} = *${result}*` });
+  } catch (e) {
+    await sock.sendMessage(jid, { text: `❌ Could not calculate: ${e.message}` });
   }
-};
+}
+
+module.exports = { execute };

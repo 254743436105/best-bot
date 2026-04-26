@@ -1,35 +1,27 @@
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 
-module.exports = async (sock, msg, args, from) => {
+async function execute(sock, msg, args, jid) {
   const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-  const imageMsg = quoted?.imageMessage || msg.message?.imageMessage;
 
-  if (!imageMsg) {
-    return sock.sendMessage(from, {
-      text: '⚠️ Please reply to an image with `!sticker` to convert it to a sticker.',
-    });
+  if (!quoted?.imageMessage) {
+    return sock.sendMessage(jid, { text: '⚠️ Reply to an image with *!sticker* to convert it.' });
   }
 
   try {
-    await sock.sendMessage(from, { text: '🎨 Converting to sticker...' });
+    // Reconstruct a minimal message object to download from
+    const fakeMsg = {
+      key: { ...msg.key },
+      message: quoted,
+    };
 
-    // Build a fake message object so downloadMediaMessage can fetch it
-    const targetMsg = quoted
-      ? {
-          key: msg.message.extendedTextMessage.contextInfo.stanzaId
-            ? { ...msg.key, id: msg.message.extendedTextMessage.contextInfo.stanzaId }
-            : msg.key,
-          message: quoted,
-        }
-      : msg;
+    const buffer = await downloadMediaMessage(fakeMsg, 'buffer', {});
 
-    const buffer = await downloadMediaMessage(targetMsg, 'buffer', {});
-
-    await sock.sendMessage(from, {
+    await sock.sendMessage(jid, {
       sticker: buffer,
     });
-  } catch (err) {
-    console.error('Sticker error:', err.message);
-    await sock.sendMessage(from, { text: '❌ Failed to create sticker. Make sure you reply to an image.' });
+  } catch (e) {
+    await sock.sendMessage(jid, { text: `❌ Failed to create sticker: ${e.message}` });
   }
-};
+}
+
+module.exports = { execute };

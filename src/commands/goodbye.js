@@ -1,9 +1,12 @@
-let goodbyeEnabled = {};
-module.exports = async (sock, msg, args, from) => {
-  if (!from.endsWith('@g.us')) return sock.sendMessage(from, { text: '❌ Group only command.' });
-  const sub = (args[0] || '').toLowerCase();
-  if (sub === 'on') { goodbyeEnabled[from] = true; return sock.sendMessage(from, { text: '👋 *Goodbye messages ON!*' }); }
-  if (sub === 'off') { goodbyeEnabled[from] = false; return sock.sendMessage(from, { text: '👋 *Goodbye messages OFF.*' }); }
-  await sock.sendMessage(from, { text: `👋 *Goodbye Messages*\nStatus: *${goodbyeEnabled[from] ? 'ON ✅' : 'OFF ❌'}*\n\n• \`!goodbye on\`\n• \`!goodbye off\`` });
-};
-module.exports.goodbyeEnabled = goodbyeEnabled;
+const goodbyeEnabled = {}; // groupJid -> true/false
+
+async function execute(sock, msg, args, jid) {
+  const toggle = args[0]?.toLowerCase();
+  if (!['on', 'off'].includes(toggle)) {
+    return sock.sendMessage(jid, { text: '⚠️ Usage: !goodbye on | off' });
+  }
+  goodbyeEnabled[jid] = toggle === 'on';
+  await sock.sendMessage(jid, { text: `👋 Goodbye messages are now *${toggle.toUpperCase()}*` });
+}
+
+module.exports = { execute, goodbyeEnabled };

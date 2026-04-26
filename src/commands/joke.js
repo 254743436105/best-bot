@@ -1,22 +1,22 @@
-const axios = require('axios');
+const https = require('https');
 
-module.exports = async (sock, msg, args, from) => {
+function fetchJSON(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { Accept: 'application/json' } }, res => {
+      let data = '';
+      res.on('data', c => (data += c));
+      res.on('end', () => { try { resolve(JSON.parse(data)); } catch(e) { reject(e); } });
+    }).on('error', reject);
+  });
+}
+
+async function execute(sock, msg, args, jid) {
   try {
-    const res = await axios.get('https://v2.jokeapi.dev/joke/Any?blacklistFlags=nsfw,racist,sexist', {
-      timeout: 8000,
-    });
-
-    const joke = res.data;
-    let text;
-
-    if (joke.type === 'single') {
-      text = `😂 *Joke*\n\n${joke.joke}`;
-    } else {
-      text = `😂 *Joke*\n\n${joke.setup}\n\n||${joke.delivery}||`;
-    }
-
-    await sock.sendMessage(from, { text });
-  } catch (err) {
-    await sock.sendMessage(from, { text: '❌ Could not fetch a joke right now. Try again!' });
+    const data = await fetchJSON('https://icanhazdadjoke.com/');
+    await sock.sendMessage(jid, { text: `😂 *Joke of the moment:*\n\n${data.joke}` });
+  } catch (e) {
+    await sock.sendMessage(jid, { text: '😅 Could not fetch a joke right now. Try again!' });
   }
-};
+}
+
+module.exports = { execute };

@@ -1,87 +1,48 @@
 const { exec } = require('child_process');
-const fs = require('fs');
+const fs   = require('fs');
 const path = require('path');
-const { promisify } = require('util');
 
-const execAsync = promisify(exec);
-const TMP_DIR = path.resolve('./tmp');
+const TMP_DIR = path.join(__dirname, '../tmp');
 
-async function ytdlpAvailable() {
-  try { await execAsync('yt-dlp --version'); return true; }
-  catch { return false; }
-}
-
-module.exports = async (sock, msg, args, from) => {
+async function execute(sock, msg, args, jid) {
   if (!args.length) {
-    return sock.sendMessage(from, {
-      text: '🎵 *Music Player*\n\nUsage:\n• `!play <song name>` — search and play\n• `!play <YouTube URL>` — play from URL\n\nExamples:\n• `!play Doja Cat Kiss Me More`\n• `!play https://youtu.be/xxxxx`',
-    });
+    return sock.sendMessage(jid, { text: '⚠️ Usage: !play <song name>' });
   }
 
   const query = args.join(' ');
-  const isUrl = query.startsWith('http://') || query.startsWith('https://');
+  await sock.sendMessage(jid, { text: `🎵 Searching for *${query}*...` });
 
-  await sock.sendMessage(from, { text: `🔍 *Searching:* _${query}_\nPlease wait...` });
+  fs.mkdirSync(TMP_DIR, { recursive: true });
 
-  if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
+  const outTemplate = path.join(TMP_DIR, `audio_${Date.now()}.%(ext)s`);
+  const cmd = `yt-dlp -x --audio-format mp3 --audio-quality 5 -o "${outTemplate}" "ytsearch1:${query}"`;
 
-  const hasYtdlp = await ytdlpAvailable();
-  if (!hasYtdlp) {
-    return sock.sendMessage(from, {
-      text: '❌ Music player not available on this server.\nyt-dlp is not installed.',
-    });
-  }
-
-  const searchQuery = isUrl ? query : `ytsearch1:${query}`;
-  const outputPath = path.join(TMP_DIR, 'audio.%(ext)s');
-
-  try {
-    // Get song info
-    const { stdout: infoOut } = await execAsync(
-      `yt-dlp --print "%(title)s|||%(duration>%M:%S)s|||%(uploader)s|||%(webpage_url)s" "${searchQuery}" --no-playlist`,
-      { timeout: 30000 }
-    );
-
-    const [title, duration, uploader, songUrl] = infoOut.trim().split('|||');
-
-    await sock.sendMessage(from, {
-      text: `🎵 *Found:* ${title}\n👤 ${uploader} | ⏱️ ${duration}\n⬇️ Downloading...`,
-    });
-
-    // Download audio
-    await execAsync(
-      `yt-dlp -x --audio-format mp3 --audio-quality 5 --max-filesize 15m -o "${outputPath}" "${searchQuery}" --no-playlist`,
-      { timeout: 120000 }
-    );
-
-    // Find file
-    const files = fs.readdirSync(TMP_DIR).filter(f => f.includes('audio'));
-    if (!files.length) throw new Error('No audio file downloaded');
-
-    const audioPath = path.join(TMP_DIR, files[0]);
-    const sizeMB = (fs.statSync(audioPath).size / 1024 / 1024).toFixed(2);
-
-    // Send audio
-    await sock.sendMessage(from, {
-      audio: fs.readFileSync(audioPath),
-      mimetype: 'audio/mp4',
-      ptt: false,
-      fileName: `${title}.mp3`,
-    }, { quoted: msg });
-
-    await sock.sendMessage(from, {
-      text: `✅ *Now Playing*\n━━━━━━━━━━━━━━━\n🎵 ${title}\n👤 ${uploader}\n⏱️ ${duration} | 📦 ${sizeMB} MB\n🔗 ${songUrl}`,
-    });
-
-    fs.unlinkSync(audioPath);
-
-  } catch (err) {
-    console.error('Play error:', err.message);
-    if (err.message.includes('filesize') || err.message.includes('larger')) {
-      return sock.sendMessage(from, { text: '❌ Song too large (>15MB). Try a shorter song.' });
+  exec(cmd, { timeout: 120000 }, async (err, stdout, stderr) => {
+    if (err) {
+      console.error('yt-dlp error:', stderr);
+      return sock.sendMessage(jid, { text: `❌ Could not download audio.\n${stderr.slice(0, 200)}` });
     }
-    await sock.sendMessage(from, {
-      text: `❌ Could not play: _${query}_\n\nTips:\n• Try a more specific song name\n• Paste a YouTube URL directly\n• Make sure song is publicly available`,
-    });
-  }
-};
+
+    // Find the downloaded file
+    const files = fs.readdirSync(TMP_DIR).filter(f => f.startsWith('audio_') && f.endsWith('.mp3'));
+    if (!files.length) {
+      return sock.sendMessage(jid, { text: '❌ Audio file not found after download.' });
+    }
+
+    const file = path.join(TMP_DIR, files[files.length - 1]);
+
+    try {
+      await sock.sendMessage(jid, {
+        audio: fs.readFileSync(file),
+        mimetype: 'audio/mpeg',
+        ptt: false,
+      });
+    } catch (e) {
+      await sock.sendMessage(jid, { text: `❌ Failed to send audio: ${e.message}` });
+    } finally {
+      fs.unlinkSync(file);
+    }
+  });
+}
+
+module.exports = { execute };

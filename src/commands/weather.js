@@ -1,64 +1,53 @@
-const axios = require('axios');
+const https = require('https');
 
-const WMO_CODES = {
-  0: '☀️ Clear sky', 1: '🌤️ Mainly clear', 2: '⛅ Partly cloudy', 3: '☁️ Overcast',
-  45: '🌫️ Foggy', 48: '🌫️ Icy fog', 51: '🌦️ Light drizzle', 53: '🌧️ Drizzle',
-  55: '🌧️ Heavy drizzle', 61: '🌧️ Slight rain', 63: '🌧️ Moderate rain',
-  65: '🌧️ Heavy rain', 71: '🌨️ Slight snow', 73: '❄️ Moderate snow',
-  75: '❄️ Heavy snow', 80: '🌦️ Rain showers', 81: '🌧️ Moderate showers',
-  82: '⛈️ Violent showers', 95: '⛈️ Thunderstorm', 99: '⛈️ Thunderstorm with hail',
-};
+function fetchJSON(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, res => {
+      let data = '';
+      res.on('data', chunk => (data += chunk));
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { reject(e); }
+      });
+    }).on('error', reject);
+  });
+}
 
-module.exports = async (sock, msg, args, from) => {
+async function execute(sock, msg, args, jid) {
   if (!args.length) {
-    return sock.sendMessage(from, { text: '⚠️ Please provide a city.\nExample: `!weather Nairobi`' });
+    return sock.sendMessage(jid, { text: '⚠️ Usage: !weather <city>' });
   }
 
   const city = args.join(' ');
+  const apiKey = process.env.WEATHER_API_KEY;
+
+  if (!apiKey) {
+    return sock.sendMessage(jid, { text: '⚠️ WEATHER_API_KEY is not set in environment variables.' });
+  }
 
   try {
-    // Geocode the city
-    const geoRes = await axios.get('https://geocoding-api.open-meteo.com/v1/search', {
-      params: { name: city, count: 1, language: 'en', format: 'json' },
-      timeout: 8000,
-    });
+    const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${apiKey}&units=metric`;
+    const data = await fetchJSON(url);
 
-    const results = geoRes.data?.results;
-    if (!results || results.length === 0) {
-      return sock.sendMessage(from, { text: `❌ Could not find city: *${city}*` });
+    if (data.cod !== 200) {
+      return sock.sendMessage(jid, { text: `❌ City not found: *${city}*` });
     }
 
-    const { latitude, longitude, name, country } = results[0];
-
-    // Fetch weather
-    const weatherRes = await axios.get('https://api.open-meteo.com/v1/forecast', {
-      params: {
-        latitude,
-        longitude,
-        current: 'temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code,apparent_temperature',
-        wind_speed_unit: 'kmh',
-        timezone: 'auto',
-      },
-      timeout: 8000,
-    });
-
-    const c = weatherRes.data.current;
-    const condition = WMO_CODES[c.weather_code] || '🌡️ Unknown';
-
+    const { name, sys, main, weather, wind } = data;
     const text = `
-🌍 *Weather in ${name}, ${country}*
-━━━━━━━━━━━━━━━
-${condition}
-🌡️ Temp: *${c.temperature_2m}°C* (feels like ${c.apparent_temperature}°C)
-💧 Humidity: *${c.relative_humidity_2m}%*
-💨 Wind: *${c.wind_speed_10m} km/h*
-━━━━━━━━━━━━━━━
-_Data from Open-Meteo_
+🌍 *Weather in ${name}, ${sys.country}*
+
+🌤 ${weather[0].description}
+🌡 Temp: *${main.temp}°C* (feels like ${main.feels_like}°C)
+💧 Humidity: *${main.humidity}%*
+💨 Wind: *${wind.speed} m/s*
+🔼 High: ${main.temp_max}°C  🔽 Low: ${main.temp_min}°C
     `.trim();
 
-    await sock.sendMessage(from, { text });
-  } catch (err) {
-    console.error('Weather error:', err.message);
-    await sock.sendMessage(from, { text: '❌ Failed to fetch weather. Please try again later.' });
+    await sock.sendMessage(jid, { text });
+  } catch (e) {
+    await sock.sendMessage(jid, { text: `❌ Failed to fetch weather: ${e.message}` });
   }
-};
+}
+
+module.exports = { execute };
