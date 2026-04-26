@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: whatsapp-bot
+    env: node
+    buildCommand: npm install --legacy-peer-deps
+    startCommand: node src/index.js
+    envVars:
+      - key: PREFIX
+        value: "!"
+      - key: TIMEZONE
+        value: Africa/Nairobi
+      - key: SESSION_DATA
+        value: ""
+      - key: NODE_ENV
+        value: production
