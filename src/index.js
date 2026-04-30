@@ -107,7 +107,7 @@ async function startBot() {
         }
         if (action === 'remove' && goodbyeEnabled[id]) {
           await sock.sendMessage(id, {
-            text: `👋 *Goodbye!*\n\n@${num} has left the group.\nWe'll miss you! 😢`,
+            text: `👋 *Goodbye!*\n\n@${num} has left the group.\nGO AND SUFFER IDIOT! 😢`,
             mentions: [jid],
           });
         }
