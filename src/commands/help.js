@@ -1,167 +1,91 @@
 const PREFIX = process.env.PREFIX || '!';
 
 async function execute(sock, msg, args, jid) {
-  const text = `
-🤖 *WhatsApp Bot — All Commands*
+  const category = args[0]?.toLowerCase();
 
-━━━━━━━━━━━━━━━━━━
-🎯 *General*
-━━━━━━━━━━━━━━━━━━
-${PREFIX}help              — Show this menu
-${PREFIX}ping              — Check bot status
-${PREFIX}alive             — Is the bot alive?
-${PREFIX}time              — Current date & time
-${PREFIX}today             — Today's info
+  if (category === '2') {
+    await sock.sendMessage(jid, { text: `
+🎵 *Media & Tech*
+${PREFIX}play <song> — Audio
+${PREFIX}video <name> — Video
+${PREFIX}lyrics <song> — Lyrics
+${PREFIX}sticker — Image to sticker
+${PREFIX}tts <text> — Text to speech
+${PREFIX}translate <text> — Translate
+${PREFIX}app <name> — Google Play search
+${PREFIX}binary <text> — Text to binary
+${PREFIX}hex <text> — Text to hex
+${PREFIX}hash <text> — Hash generator
+${PREFIX}encode <text> — Base64 encode
+${PREFIX}decode <text> — Base64 decode
+${PREFIX}wordcount <text> — Word count
+${PREFIX}reverse <text> — Reverse text
+${PREFIX}spell <text> — Spell check
 
-━━━━━━━━━━━━━━━━━━
-🤖 *AI & Info*
-━━━━━━━━━━━━━━━━━━
-${PREFIX}ai <question>     — Ask AI anything
-${PREFIX}define <word>     — Dictionary definition
-${PREFIX}wikipedia <q>     — Wikipedia search
-${PREFIX}country <name>    — Country info
-${PREFIX}ip <address>      — IP address lookup
-${PREFIX}github <user>     — GitHub profile info
-${PREFIX}speed             — Internet speed test
-
-━━━━━━━━━━━━━━━━━━
-📖 *Religion*
-━━━━━━━━━━━━━━━━━━
-${PREFIX}bible <ref>       — Bible verse (e.g. John 3:16)
-${PREFIX}bible random      — Random Bible verse
-${PREFIX}quran <ref>       — Quran verse (e.g. 2:255)
-${PREFIX}quran random      — Random Quran verse
-
-━━━━━━━━━━━━━━━━━━
-🌤️ *Utilities*
-━━━━━━━━━━━━━━━━━━
-${PREFIX}weather <city>    — Live weather
-${PREFIX}forecast <city>   — Weather forecast
-${PREFIX}calc <expr>       — Calculator
-${PREFIX}math <expr>       — Math solver
-${PREFIX}convert <val>     — Unit converter
-${PREFIX}temperature <v>   — Temp converter
-${PREFIX}weight <val>      — Weight converter
-${PREFIX}length <val>      — Length converter
-${PREFIX}area <val>        — Area converter
-${PREFIX}percentage <v>    — Percentage calc
-${PREFIX}bmi <h> <w>       — BMI calculator
-${PREFIX}age <date>        — Age calculator
-${PREFIX}howold <date>     — How old are you?
-${PREFIX}timer <time>      — Set a timer
-${PREFIX}remind <t> <msg>  — Set a reminder
-${PREFIX}reminders         — List reminders
-${PREFIX}reminders del <id>— Delete reminder
-${PREFIX}storage           — Storage info
-${PREFIX}uuid              — Generate UUID
-${PREFIX}password          — Generate password
-
-━━━━━━━━━━━━━━━━━━
-🎵 *Media*
-━━━━━━━━━━━━━━━━━━
-${PREFIX}play <song>       — Search & send audio
-${PREFIX}video <name>      — Search & send video
-${PREFIX}lyrics <song>     — Get song lyrics
-${PREFIX}sticker           — Image → sticker (reply to image)
-${PREFIX}tts <text>        — Text to speech
-${PREFIX}translate <text>  — Translate text
-
-━━━━━━━━━━━━━━━━━━
-📱 *Apps & Tech*
-━━━━━━━━━━━━━━━━━━
-${PREFIX}app <name>        — Search Google Play
-${PREFIX}qr                — Session QR info
-${PREFIX}binary <text>     — Text to binary
-${PREFIX}hex <text>        — Text to hex
-${PREFIX}hash <text>       — Hash generator
-${PREFIX}encode <text>     — Base64 encode
-${PREFIX}decode <text>     — Base64 decode
-${PREFIX}wordcount <text>  — Count words
-${PREFIX}reverse <text>    — Reverse text
-${PREFIX}spell <text>      — Spell checker
-
-━━━━━━━━━━━━━━━━━━
-⚽ *Sports & News*
-━━━━━━━━━━━━━━━━━━
-${PREFIX}sports             — Latest sports news
-${PREFIX}sports <topic>     — Sports by topic
-${PREFIX}news               — Latest news
-
-━━━━━━━━━━━━━━━━━━
 😂 *Fun & Games*
-━━━━━━━━━━━━━━━━━━
-${PREFIX}joke               — Random joke
-${PREFIX}joke2              — Another joke style
-${PREFIX}joke3              — Yet another joke
-${PREFIX}pun                — Random pun
-${PREFIX}riddle             — Random riddle
-${PREFIX}trivia             — Trivia question
-${PREFIX}hangman            — Play hangman
-${PREFIX}tictactoe          — Play tic tac toe
-${PREFIX}wordle             — Play wordle
-${PREFIX}8ball <question>   — Magic 8 ball
-${PREFIX}truth              — Truth question
-${PREFIX}dare               — Dare challenge
-${PREFIX}wyr                — Would you rather
-${PREFIX}poll <question>    — Create a poll
-${PREFIX}choose <a|b>       — Choose between options
-${PREFIX}roll               — Roll a dice
-${PREFIX}flip               — Flip a coin
-${PREFIX}random             — Random number
-${PREFIX}rate <thing>       — Rate something
-${PREFIX}ship <a> <b>       — Ship two people
-${PREFIX}love <name>        — Love meter
-${PREFIX}roast <name>       — Roast someone 😂
-${PREFIX}insult <name>      — Insult generator
-${PREFIX}compliment         — Give a compliment
-${PREFIX}pickup             — Pickup line
-${PREFIX}hack <target>      — Fake hacker prank 😂
+${PREFIX}joke ${PREFIX}joke2 ${PREFIX}joke3 ${PREFIX}pun
+${PREFIX}riddle ${PREFIX}trivia ${PREFIX}hangman
+${PREFIX}tictactoe ${PREFIX}wordle ${PREFIX}8ball <q>
+${PREFIX}truth ${PREFIX}dare ${PREFIX}wyr ${PREFIX}poll <q>
+${PREFIX}choose ${PREFIX}roll ${PREFIX}flip ${PREFIX}random
+${PREFIX}rate ${PREFIX}ship ${PREFIX}love ${PREFIX}roast
+${PREFIX}insult ${PREFIX}compliment ${PREFIX}pickup ${PREFIX}hack
 
-━━━━━━━━━━━━━━━━━━
-🌟 *Horoscope & Facts*
-━━━━━━━━━━━━━━━━━━
-${PREFIX}horoscope <sign>   — Daily horoscope
-${PREFIX}zodiac <sign>      — Zodiac info
-${PREFIX}fortune            — Fortune cookie
-${PREFIX}motivate           — Motivational message
-${PREFIX}quote              — Inspirational quote
-${PREFIX}advice             — Random advice
-${PREFIX}fact               — Random fact
-${PREFIX}catfact            — Cat fact
-${PREFIX}dogfact            — Dog fact
-${PREFIX}numberfact <n>     — Fact about a number
-${PREFIX}pokemon <name>     — Pokémon info
-${PREFIX}rhyme <word>       — Find rhymes
-${PREFIX}synonym <word>     — Find synonyms
-${PREFIX}antonym <word>     — Find antonyms
+🌟 *Facts & Horoscope*
+${PREFIX}horoscope ${PREFIX}zodiac ${PREFIX}fortune
+${PREFIX}motivate ${PREFIX}quote ${PREFIX}advice ${PREFIX}fact
+${PREFIX}catfact ${PREFIX}dogfact ${PREFIX}numberfact
+${PREFIX}pokemon ${PREFIX}rhyme ${PREFIX}synonym ${PREFIX}antonym
 
-━━━━━━━━━━━━━━━━━━
 👥 *Groups*
-━━━━━━━━━━━━━━━━━━
-${PREFIX}welcome on/off     — Toggle welcome msg
-${PREFIX}goodbye on/off     — Toggle goodbye msg
-${PREFIX}tagall <msg>       — Tag all members
-${PREFIX}groupinfo          — Group information
-${PREFIX}kick @user         — Kick a member
-${PREFIX}promote @user      — Promote to admin
-${PREFIX}demote @user       — Demote from admin
-${PREFIX}mute               — Mute the group
+${PREFIX}welcome ${PREFIX}goodbye ${PREFIX}tagall
+${PREFIX}groupinfo ${PREFIX}kick ${PREFIX}promote
+${PREFIX}demote ${PREFIX}mute
 
-━━━━━━━━━━━━━━━━━━
-👤 *Presence & Status*
-━━━━━━━━━━━━━━━━━━
-${PREFIX}presence <type>    — typing/recording/online/offline
-${PREFIX}statusview on/off  — Auto view statuses
-${PREFIX}savestatus         — Save status to inbox
-${PREFIX}autobio <text>     — Set your WhatsApp bio
-${PREFIX}afk <reason>       — Set AFK status
-${PREFIX}antidelete on/off  — Recover deleted msgs
-${PREFIX}creep              — Spy mode 👀
+👤 *Status & Presence*
+${PREFIX}presence ${PREFIX}statusview ${PREFIX}savestatus
+${PREFIX}autobio ${PREFIX}afk ${PREFIX}antidelete ${PREFIX}creep
+    `.trim() });
+    return;
+  }
 
-_Type any command to get started!_ 🚀
-`.trim();
+  // Default: page 1
+  await sock.sendMessage(jid, { text: `
+🤖 *WhatsApp Bot Commands — Page 1/2*
+_Type *${PREFIX}help 2* for more commands_
 
-  await sock.sendMessage(jid, { text });
+🎯 *General*
+${PREFIX}ping ${PREFIX}alive ${PREFIX}time ${PREFIX}today
+
+🤖 *AI & Info*
+${PREFIX}ai <question> — Ask AI anything
+${PREFIX}define <word> — Dictionary
+${PREFIX}wikipedia <q> — Wikipedia
+${PREFIX}country <name> — Country info
+${PREFIX}ip <address> — IP lookup
+${PREFIX}github <user> — GitHub profile
+${PREFIX}speed — Speed test
+
+📖 *Religion*
+${PREFIX}bible <ref> — e.g. John 3:16
+${PREFIX}bible random — Random verse
+${PREFIX}quran <ref> — e.g. 2:255
+${PREFIX}quran random — Random ayah
+
+🌤️ *Utilities*
+${PREFIX}weather ${PREFIX}forecast ${PREFIX}calc ${PREFIX}math
+${PREFIX}convert ${PREFIX}temperature ${PREFIX}weight ${PREFIX}length
+${PREFIX}area ${PREFIX}percentage ${PREFIX}bmi ${PREFIX}age
+${PREFIX}howold ${PREFIX}timer ${PREFIX}remind ${PREFIX}reminders
+${PREFIX}storage ${PREFIX}uuid ${PREFIX}password
+
+⚽ *Sports & News*
+${PREFIX}sports — Latest sports news
+${PREFIX}sports <topic> — By topic
+${PREFIX}news — Latest news
+
+_Type *${PREFIX}help 2* for Media, Games, Groups & more_ 👇
+  `.trim() });
 }
 
 module.exports = { execute };
