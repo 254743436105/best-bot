@@ -15,14 +15,11 @@ function getSender(msg) {
 }
 
 const commands = {
-  // General
   help:        require('../commands/help'),
   ping:        require('../commands/ping'),
   alive:       require('../commands/alive'),
   time:        require('../commands/time'),
   today:       require('../commands/today'),
-
-  // AI & Info
   ai:          require('../commands/ai'),
   define:      require('../commands/define'),
   wikipedia:   require('../commands/wikipedia'),
@@ -30,12 +27,8 @@ const commands = {
   ip:          require('../commands/ip'),
   github:      require('../commands/github'),
   speed:       require('../commands/speed'),
-
-  // Religion
   bible:       require('../commands/bible'),
   quran:       require('../commands/quran'),
-
-  // Utilities
   weather:     require('../commands/weather'),
   forecast:    require('../commands/forecast'),
   calc:        require('../commands/calc'),
@@ -55,16 +48,12 @@ const commands = {
   storage:     require('../commands/storage'),
   uuid:        require('../commands/uuid'),
   password:    require('../commands/password'),
-
-  // Media
   play:        require('../commands/play'),
   video:       require('../commands/video'),
   lyrics:      require('../commands/lyrics'),
   sticker:     require('../commands/sticker'),
   tts:         require('../commands/tts'),
   translate:   require('../commands/translate'),
-
-  // Apps & Tech
   app:         require('../commands/app'),
   qr:          require('../commands/qr'),
   binary:      require('../commands/binary'),
@@ -75,12 +64,8 @@ const commands = {
   wordcount:   require('../commands/wordcount'),
   reverse:     require('../commands/reverse'),
   spell:       require('../commands/spell'),
-
-  // Sports & News
   sports:      require('../commands/sports'),
   news:        require('../commands/news'),
-
-  // Fun & Games
   joke:        require('../commands/joke'),
   joke2:       require('../commands/joke2'),
   joke3:       require('../commands/joke3'),
@@ -107,8 +92,6 @@ const commands = {
   compliment:  require('../commands/compliment'),
   pickup:      require('../commands/pickup'),
   hack:        require('../commands/hack'),
-
-  // Horoscope & Facts
   horoscope:   require('../commands/horoscope'),
   zodiac:      require('../commands/zodiac'),
   fortune:     require('../commands/fortune'),
@@ -123,8 +106,6 @@ const commands = {
   rhyme:       require('../commands/rhyme'),
   synonym:     require('../commands/synonym'),
   antonym:     require('../commands/antonym'),
-
-  // Groups
   welcome:     require('../commands/welcome'),
   goodbye:     require('../commands/goodbye'),
   tagall:      require('../commands/tagall'),
@@ -133,8 +114,6 @@ const commands = {
   promote:     require('../commands/promote'),
   demote:      require('../commands/demote'),
   mute:        require('../commands/mute'),
-
-  // Presence & Status
   presence:    require('../commands/presence'),
   statusview:  require('../commands/statusview'),
   savestatus:  require('../commands/savestatus'),
