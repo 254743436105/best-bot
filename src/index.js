@@ -1,6 +1,6 @@
 require('dotenv').config();
 const http = require('http');
-const { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, isJidBroadcast } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 const { handleMessage }              = require('./handlers/messageHandler');
@@ -8,7 +8,7 @@ const { loadReminders, checkReminders } = require('./handlers/reminderHandler');
 const { handleStatus }               = require('./handlers/statusHandler');
 const { handleStatusSave }           = require('./handlers/statusSaveHandler');
 const { cacheMessage, handleDelete } = require('./handlers/antideleteHandler');
-const { handleAntiViewOnce }         = require('./handlers/antiViewOnceHandler'); // ← NEW
+const { handleAntiViewOnce }         = require('./handlers/antiViewOnceHandler');
 const { restoreSession }             = require('./session-manager');
 const cron = require('node-cron');
 const fs   = require('fs');
@@ -21,6 +21,11 @@ const server = http.createServer((req, res) => {
   res.end('WhatsApp Bot is running ✅');
 });
 server.listen(PORT, () => console.log(`🌐 HTTP server listening on port ${PORT}`));
+
+// Keep-alive ping every 5 minutes
+setInterval(() => {
+  http.get(`http://localhost:${PORT}/`, () => {});
+}, 5 * 60 * 1000);
 
 async function startBot() {
   restoreSession();
@@ -37,6 +42,7 @@ async function startBot() {
     logger:  pino({ level: 'silent' }),
     browser: ['Personal Assistant', 'Chrome', '1.0.0'],
     getMessage: async () => ({ conversation: '' }),
+    shouldIgnoreJid: jid => isJidBroadcast(jid),
   });
 
   sock.ev.on('creds.update', saveCreds);
@@ -58,19 +64,22 @@ async function startBot() {
     }
   });
 
-  sock.ev.on('messages.upsert', async ({ messages }) => {
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    // Only process notify messages (real incoming messages)
+    if (type !== 'notify') return;
+
     for (const msg of messages) {
       if (!msg.message) continue;
 
-      // ✅ Handle status broadcasts — auto-view + auto-save to inbox
+      // Handle status broadcasts
       if (msg.key?.remoteJid === 'status@broadcast') {
         await handleStatus(sock, msg);
         await handleStatusSave(sock, msg);
         continue;
       }
 
-      // ✅ Anti View-Once — intercept before anything else
-      await handleAntiViewOnce(sock, msg); // ← NEW
+      // Anti View-Once
+      await handleAntiViewOnce(sock, msg);
 
       // Cache for antidelete
       cacheMessage(msg);
@@ -78,6 +87,7 @@ async function startBot() {
       // Skip own messages
       if (msg.key.fromMe) continue;
 
+      // ✅ Reply to BOTH private DMs and group messages
       await handleMessage(sock, msg);
     }
   });
@@ -91,7 +101,7 @@ async function startBot() {
     if (deleted.length) await handleDelete(sock, deleted);
   });
 
-  // Welcome/Goodbye on group participant updates
+  // Welcome/Goodbye
   sock.ev.on('group-participants.update', async ({ id, participants, action }) => {
     try {
       const { welcomeEnabled } = require('./commands/welcome');
@@ -107,7 +117,7 @@ async function startBot() {
         }
         if (action === 'remove' && goodbyeEnabled[id]) {
           await sock.sendMessage(id, {
-            text: `👋 *Goodbye!*\n\n@${num} has left the group.\nGO AND SUFFER IDIOT! 😢`,
+            text: `👋 *Goodbye!*\n\n@${num} has left the group. 😢`,
             mentions: [jid],
           });
         }
