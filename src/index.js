@@ -8,7 +8,6 @@ const { loadReminders, checkReminders } = require('./handlers/reminderHandler');
 const { handleStatus }               = require('./handlers/statusHandler');
 const { handleStatusSave }           = require('./handlers/statusSaveHandler');
 const { cacheMessage, handleDelete } = require('./handlers/antideleteHandler');
-const { handleAntiViewOnce }         = require('./handlers/antiViewOnceHandler');
 const { restoreSession }             = require('./session-manager');
 const cron = require('node-cron');
 const fs   = require('fs');
@@ -73,34 +72,62 @@ async function startBot() {
   });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    // Only process real incoming messages
     if (type !== 'notify') return;
 
     for (const msg of messages) {
       if (!msg.message) continue;
 
-      // Handle status broadcasts
+      // ✅ Auto-view and save ALL statuses to inbox
       if (msg.key?.remoteJid === 'status@broadcast') {
         await handleStatus(sock, msg);
         await handleStatusSave(sock, msg);
         continue;
       }
 
-      // Anti View-Once
-      await handleAntiViewOnce(sock, msg);
+      // ✅ Anti View-Once — forward to same chat automatically
+      const m = msg.message;
+      const viewOnceMsg =
+        m.viewOnceMessage?.message ||
+        m.viewOnceMessageV2?.message ||
+        m.viewOnceMessageV2Extension?.message;
 
-      // Cache for antidelete
+      if (viewOnceMsg) {
+        const sender = msg.key.participant || msg.key.remoteJid;
+        const senderNum = sender.split('@')[0];
+        try {
+          if (viewOnceMsg.imageMessage) {
+            await sock.sendMessage(msg.key.remoteJid, {
+              image: { url: viewOnceMsg.imageMessage.url },
+              mimetype: viewOnceMsg.imageMessage.mimetype,
+              caption: `👁️ *View Once Opened*\nFrom: @${senderNum}`,
+              mentions: [sender],
+            });
+          }
+          if (viewOnceMsg.videoMessage) {
+            await sock.sendMessage(msg.key.remoteJid, {
+              video: { url: viewOnceMsg.videoMessage.url },
+              mimetype: viewOnceMsg.videoMessage.mimetype,
+              caption: `👁️ *View Once Opened*\nFrom: @${senderNum}`,
+              mentions: [sender],
+            });
+          }
+        } catch (e) {
+          console.error('viewonce error:', e.message);
+        }
+      }
+
+      // ✅ Cache all messages for antidelete
       cacheMessage(msg);
 
-      // Skip own messages
+      // Skip own messages for commands
       if (msg.key.fromMe) continue;
 
-      // ✅ Reply to BOTH private DMs and group messages
+      // ✅ Handle commands — works in both DMs and groups
       await handleMessage(sock, msg);
     }
   });
 
-  // Antidelete
+  // ✅ Auto send deleted messages back to same chat
   sock.ev.on('messages.update', async (updates) => {
     const deleted = updates.filter(u =>
       u.update?.messageStubType === 1 ||
@@ -109,7 +136,7 @@ async function startBot() {
     if (deleted.length) await handleDelete(sock, deleted);
   });
 
-  // Welcome/Goodbye
+  // ✅ Welcome/Goodbye on group participant updates
   sock.ev.on('group-participants.update', async ({ id, participants, action }) => {
     try {
       const { welcomeEnabled } = require('./commands/welcome');
