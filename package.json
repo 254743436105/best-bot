@@ -1,12 +1,10 @@
 {
   "name": "whatsapp-personal-assistant-bot",
   "version": "1.0.0",
-  "description": "A personal assistant WhatsApp bot deployable on Heroku",
-  "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "heroku-postbuild": "pip install yt-dlp --quiet || true"
+    "heroku-postbuild": "pip install yt-dlp -U --quiet || true"
   },
   "engines": {
     "node": ">=18.0.0",
