@@ -13,9 +13,9 @@
       "value": "Africa/Nairobi",
       "required": false
     },
-    "SESSION_DATA": {
-      "description": "Paste your base64 session here. Leave empty to scan QR code from logs on first run.",
-      "value": "",
+    "PHONE_NUMBER": {
+      "description": "Enter your phone number without +sign.",
+      "value": "254100934193",
       "required": false
     },
     "HEROKU_APP_NAME": {
