@@ -136,7 +136,15 @@ async function handleMessage(sock, msg) {
     const sender = getSender(msg);
 
     if (commands[cmd]) {
-      await commands[cmd].execute(sock, msg, args, jid, sender);
+      const mod = commands[cmd];
+      // Support both export formats:
+      // 1. module.exports = { execute } 
+      // 2. module.exports = async (sock, msg, args, jid) => {}
+      if (typeof mod === 'function') {
+        await mod(sock, msg, args, jid, sender);
+      } else if (typeof mod.execute === 'function') {
+        await mod.execute(sock, msg, args, jid, sender);
+      }
     } else {
       await sock.sendMessage(jid, { text: `❓ Unknown command. Type *${PREFIX}help* to see all commands.` });
     }
