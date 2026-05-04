@@ -47,7 +47,7 @@ async function startBot() {
 
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+  sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
       console.log('\n📱 Scan this QR code with WhatsApp:\n');
       qrcode.generate(qr, { small: true });
@@ -61,11 +61,19 @@ async function startBot() {
     }
     if (connection === 'open') {
       console.log('✅ Bot connected! Send !help to test.');
+      try {
+        const myJid = sock.user.id.replace(/:\d+/, '') + '@s.whatsapp.net';
+        await sock.sendMessage(myJid, {
+          text: `🤖 *Connected by Mungai Yobih*\n\n✅ Bot is online and ready!\n\n_Type !help to see all commands_`
+        });
+      } catch (e) {
+        console.error('Failed to send connect message:', e.message);
+      }
     }
   });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    // Only process notify messages (real incoming messages)
+    // Only process real incoming messages
     if (type !== 'notify') return;
 
     for (const msg of messages) {
