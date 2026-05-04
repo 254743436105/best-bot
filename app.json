@@ -21,6 +21,10 @@
     "HEROKU_APP_NAME": {
       "description": "Your Heroku app name — enables auto session saving after reconnects.",
       "required": false
+    },
+    "SESSION_DATA": {
+      "description": "your session provided by yobih mkuu.",
+      "require": true
     }
   },
   "formation": {
