@@ -11,36 +11,22 @@ function restoreSession() {
   }
   try {
     fs.mkdirSync(AUTH_DIR, { recursive: true });
-    // Try multi-file JSON format first
+    const parsed = JSON.parse(data);
+    // Multi-file session format
+    Object.keys(parsed).forEach(filename => {
+      const buf = Buffer.from(parsed[filename], 'base64');
+      fs.writeFileSync(path.join(AUTH_DIR, filename), buf);
+    });
+    console.log('✅ Session restored from SESSION_DATA (multi-file).');
+  } catch {
     try {
-      const parsed = JSON.parse(data);
-      if (typeof parsed === 'object' && !parsed.noiseKey) {
-        Object.keys(parsed).forEach(filename => {
-          const buf = Buffer.from(parsed[filename], 'base64');
-          fs.writeFileSync(path.join(AUTH_DIR, filename), buf);
-        });
-        console.log('✅ Session restored from SESSION_DATA (multi-file).');
-        return;
-      }
-    } catch {}
-    // Try base64 creds.json
-    try {
+      // Fallback: single creds.json base64
       const json = Buffer.from(data.replace(/\s/g, ''), 'base64').toString('utf8');
-      JSON.parse(json); // validate
       fs.writeFileSync(path.join(AUTH_DIR, 'creds.json'), json);
       console.log('✅ Session restored from SESSION_DATA (base64).');
-      return;
-    } catch {}
-    // Try raw JSON
-    try {
-      JSON.parse(data);
-      fs.writeFileSync(path.join(AUTH_DIR, 'creds.json'), data);
-      console.log('✅ Session restored from SESSION_DATA (raw JSON).');
-      return;
-    } catch {}
-    console.error('⚠️ SESSION_DATA format not recognized.');
-  } catch (err) {
-    console.error('⚠️ Failed to restore session:', err.message);
+    } catch (err) {
+      console.error('⚠️ Failed to restore session:', err.message);
+    }
   }
 }
 
