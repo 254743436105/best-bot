@@ -21,7 +21,6 @@ const server = http.createServer((req, res) => {
 });
 server.listen(PORT, () => console.log(`🌐 HTTP server listening on port ${PORT}`));
 
-// Keep-alive ping every 5 minutes
 setInterval(() => {
   http.get(`http://localhost:${PORT}/`, () => {});
 }, 5 * 60 * 1000);
@@ -44,19 +43,42 @@ async function startBot() {
     shouldIgnoreJid: jid => isJidBroadcast(jid),
   });
 
+  // Use pair code if not registered
+  if (!state.creds.registered) {
+    const phoneNumber = process.env.PHONE_NUMBER;
+    if (phoneNumber) {
+      setTimeout(async () => {
+        try {
+          const code = await sock.requestPairingCode(phoneNumber);
+          console.log(`🔑 PAIRING CODE: ${code}`);
+          console.log(`👆 Enter this code in WhatsApp → Linked Devices → Link with phone number`);
+        } catch (e) {
+          console.error('Pairing code error:', e.message);
+        }
+      }, 3000);
+    } else {
+      // Fallback to QR
+      console.log('\n📱 No PHONE_NUMBER set — scan QR code:\n');
+    }
+  }
+
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
-      console.log('\n📱 Scan this QR code with WhatsApp:\n');
       qrcode.generate(qr, { small: true });
     }
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode;
       const shouldReconnect = code !== DisconnectReason.loggedOut;
       console.log(`❌ Connection closed (code ${code}). Reconnecting: ${shouldReconnect}`);
-      if (shouldReconnect) setTimeout(startBot, 5000);
-      else console.log('🚫 Logged out. Clear SESSION_DATA and restart.');
+      if (shouldReconnect) {
+        const delay = code === 500 ? 30000 : 5000;
+        console.log(`⏳ Waiting ${delay / 1000}s before reconnecting...`);
+        setTimeout(startBot, delay);
+      } else {
+        console.log('🚫 Logged out. Clear SESSION_DATA and restart.');
+      }
     }
     if (connection === 'open') {
       console.log('✅ Bot connected! Send !help to test.');
@@ -77,14 +99,12 @@ async function startBot() {
     for (const msg of messages) {
       if (!msg.message) continue;
 
-      // ✅ Auto-view and save ALL statuses to inbox
       if (msg.key?.remoteJid === 'status@broadcast') {
         await handleStatus(sock, msg);
         await handleStatusSave(sock, msg);
         continue;
       }
 
-      // ✅ Anti View-Once — forward to same chat automatically
       const m = msg.message;
       const viewOnceMsg =
         m.viewOnceMessage?.message ||
@@ -116,18 +136,12 @@ async function startBot() {
         }
       }
 
-      // ✅ Cache all messages for antidelete
       cacheMessage(msg);
-
-      // Skip own messages for commands
       if (msg.key.fromMe) continue;
-
-      // ✅ Handle commands — works in both DMs and groups
       await handleMessage(sock, msg);
     }
   });
 
-  // ✅ Auto send deleted messages back to same chat
   sock.ev.on('messages.update', async (updates) => {
     const deleted = updates.filter(u =>
       u.update?.messageStubType === 1 ||
@@ -136,17 +150,15 @@ async function startBot() {
     if (deleted.length) await handleDelete(sock, deleted);
   });
 
-  // ✅ Welcome/Goodbye on group participant updates
   sock.ev.on('group-participants.update', async ({ id, participants, action }) => {
     try {
       const { welcomeEnabled } = require('./commands/welcome');
       const { goodbyeEnabled } = require('./commands/goodbye');
-
       for (const jid of participants) {
         const num = jid.split('@')[0];
         if (action === 'add' && welcomeEnabled[id]) {
           await sock.sendMessage(id, {
-            text: `👋 *Welcome to the group!*\n\n@${num} has joined! 🎉\nWe're glad to have you here!`,
+            text: `👋 *Welcome to the group!*\n\n@${num} has joined! 🎉`,
             mentions: [jid],
           });
         }
