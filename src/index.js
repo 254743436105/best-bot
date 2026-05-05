@@ -43,29 +43,11 @@ async function startBot() {
     shouldIgnoreJid: jid => isJidBroadcast(jid),
   });
 
-  // Use pair code if not registered
-  if (!state.creds.registered) {
-    const phoneNumber = process.env.PHONE_NUMBER;
-    if (phoneNumber) {
-      setTimeout(async () => {
-        try {
-          const code = await sock.requestPairingCode(phoneNumber);
-          console.log(`🔑 PAIRING CODE: ${code}`);
-          console.log(`👆 Enter this code in WhatsApp → Linked Devices → Link with phone number`);
-        } catch (e) {
-          console.error('Pairing code error:', e.message);
-        }
-      }, 3000);
-    } else {
-      // Fallback to QR
-      console.log('\n📱 No PHONE_NUMBER set — scan QR code:\n');
-    }
-  }
-
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
+      console.log('\n📱 Scan this QR code with WhatsApp:\n');
       qrcode.generate(qr, { small: true });
     }
     if (connection === 'close') {
@@ -73,7 +55,7 @@ async function startBot() {
       const shouldReconnect = code !== DisconnectReason.loggedOut;
       console.log(`❌ Connection closed (code ${code}). Reconnecting: ${shouldReconnect}`);
       if (shouldReconnect) {
-        const delay = code === 500 ? 30000 : 5000;
+        const delay = code === 500 ? 60000 : 5000;
         console.log(`⏳ Waiting ${delay / 1000}s before reconnecting...`);
         setTimeout(startBot, delay);
       } else {
