@@ -11,22 +11,48 @@ function restoreSession() {
   }
   try {
     fs.mkdirSync(AUTH_DIR, { recursive: true });
-    const parsed = JSON.parse(data);
-    // Multi-file session format
-    Object.keys(parsed).forEach(filename => {
-      const buf = Buffer.from(parsed[filename], 'base64');
-      fs.writeFileSync(path.join(AUTH_DIR, filename), buf);
-    });
-    console.log('✅ Session restored from SESSION_DATA (multi-file).');
-  } catch {
+
+    // Format 1: XMDIA... (Baileys session string)
+    if (data.startsWith('XMDIA') || data.startsWith('XMD')) {
+      const decoded = Buffer.from(data, 'base64');
+      fs.writeFileSync(path.join(AUTH_DIR, 'creds.json'), decoded);
+      console.log('✅ Session restored from SESSION_DATA (XMDIA format).');
+      return;
+    }
+
+    // Format 2: Multi-file JSON object
     try {
-      // Fallback: single creds.json base64
+      const parsed = JSON.parse(data);
+      if (typeof parsed === 'object' && !Array.isArray(parsed)) {
+        Object.keys(parsed).forEach(filename => {
+          const buf = Buffer.from(parsed[filename], 'base64');
+          fs.writeFileSync(path.join(AUTH_DIR, filename), buf);
+        });
+        console.log('✅ Session restored from SESSION_DATA (multi-file).');
+        return;
+      }
+    } catch {}
+
+    // Format 3: base64 encoded creds.json
+    try {
       const json = Buffer.from(data.replace(/\s/g, ''), 'base64').toString('utf8');
+      JSON.parse(json);
       fs.writeFileSync(path.join(AUTH_DIR, 'creds.json'), json);
       console.log('✅ Session restored from SESSION_DATA (base64).');
-    } catch (err) {
-      console.error('⚠️ Failed to restore session:', err.message);
-    }
+      return;
+    } catch {}
+
+    // Format 4: raw JSON
+    try {
+      JSON.parse(data);
+      fs.writeFileSync(path.join(AUTH_DIR, 'creds.json'), data);
+      console.log('✅ Session restored from SESSION_DATA (raw JSON).');
+      return;
+    } catch {}
+
+    console.error('⚠️ SESSION_DATA format not recognized.');
+  } catch (err) {
+    console.error('⚠️ Failed to restore session:', err.message);
   }
 }
 
