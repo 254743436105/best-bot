@@ -20,7 +20,11 @@ process.on('uncaughtException', (err) => {
 });
 
 process.on('unhandledRejection', (err) => {
-  console.error('Unhandled Rejection:', err?.message || err);
+  if (err?.message === 'Connection Closed' || err?.output?.statusCode === 428) {
+    console.warn('⚠️ Ignored Baileys closed socket error');
+    return;
+  }
+  console.error('💥 Unhandled rejection:', err);
 });
 
 const server = http.createServer((req, res) => {
