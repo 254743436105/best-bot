@@ -12,6 +12,13 @@ const { restoreSession }             = require('./session-manager');
 const cron = require('node-cron');
 const fs   = require('fs');
 
+// Fixie proxy for Heroku
+if (process.env.FIXIE_URL) {
+  process.env.HTTPS_PROXY = process.env.FIXIE_URL;
+  process.env.HTTP_PROXY = process.env.FIXIE_URL;
+  console.log('🌐 Fixie proxy enabled');
+}
+
 const AUTH_DIR = './auth_info';
 const PORT = process.env.PORT || 3000;
 
