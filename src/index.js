@@ -46,9 +46,12 @@ async function startBot() {
     version,
     auth:    state,
     logger:  pino({ level: 'silent' }),
-    browser: ['Personal Assistant', 'Chrome', '1.0.0'],
+    browser: ['Ubuntu', 'Chrome', '20.0.04'],
     getMessage: async () => ({ conversation: '' }),
     shouldIgnoreJid: jid => isJidBroadcast(jid),
+    connectTimeoutMs: 60000,
+    keepAliveIntervalMs: 10000,
+    retryRequestDelayMs: 250,
   });
 
   sock.ev.on('creds.update', saveCreds);
@@ -128,7 +131,6 @@ async function startBot() {
 
       cacheMessage(msg);
 
-      // Allow commands from inbox (own number) and groups
       const myJid = sock.user.id.replace(/:\d+/, '') + '@s.whatsapp.net';
       if (msg.key.fromMe && msg.key.remoteJid !== myJid) continue;
 
