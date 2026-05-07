@@ -8,30 +8,35 @@ const { loadReminders, checkReminders } = require('./handlers/reminderHandler');
 const { handleStatus }               = require('./handlers/statusHandler');
 const { handleStatusSave }           = require('./handlers/statusSaveHandler');
 const { cacheMessage, handleDelete } = require('./handlers/antideleteHandler');
-const { restoreSession }             = require('./session-manager');
+const { restoreSession, saveSession } = require('./session-manager');
 const cron = require('node-cron');
 const fs   = require('fs');
 
 const AUTH_DIR = './auth_info';
 const PORT = process.env.PORT || 3000;
 
+// Must be before everything — prevents Baileys socket errors from crashing the process
 process.on('uncaughtException', (err) => {
+  if (err?.message === 'Connection Closed' || err?.output?.statusCode === 428) {
+    console.warn('Ignored Baileys uncaught exception');
+    return;
+  }
   console.error('Uncaught Exception:', err.message);
 });
 
 process.on('unhandledRejection', (err) => {
   if (err?.message === 'Connection Closed' || err?.output?.statusCode === 428) {
-    console.warn('⚠️ Ignored Baileys closed socket error');
+    console.warn('Ignored Baileys closed socket error');
     return;
   }
-  console.error('💥 Unhandled rejection:', err);
+  console.error('Unhandled rejection:', err);
 });
 
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('WhatsApp Bot is running ✅');
+  res.end('WhatsApp Bot is running');
 });
-server.listen(PORT, () => console.log(`🌐 HTTP server listening on port ${PORT}`));
+server.listen(PORT, () => console.log(`HTTP server listening on port ${PORT}`));
 
 setInterval(() => {
   http.get(`http://localhost:${PORT}/`, () => {});
@@ -44,7 +49,7 @@ async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version }          = await fetchLatestBaileysVersion();
 
-  console.log(`🤖 Starting WhatsApp Bot (Baileys v${version.join('.')})`);
+  console.log(`Starting WhatsApp Bot (Baileys v${version.join('.')})`);
 
   const sock = makeWASocket({
     version,
@@ -58,31 +63,37 @@ async function startBot() {
     retryRequestDelayMs: 250,
   });
 
-  sock.ev.on('creds.update', saveCreds);
+  // Save creds AND persist session to file after every update
+  sock.ev.on('creds.update', async () => {
+    await saveCreds();
+    saveSession();
+  });
 
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
-      console.log('\n📱 Scan this QR code with WhatsApp:\n');
+      console.log('\nScan this QR code with WhatsApp:\n');
       qrcode.generate(qr, { small: true });
     }
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode;
       const shouldReconnect = code !== DisconnectReason.loggedOut;
-      console.log(`❌ Connection closed (code ${code}). Reconnecting: ${shouldReconnect}`);
+      console.log(`Connection closed (code ${code}). Reconnecting: ${shouldReconnect}`);
       if (shouldReconnect) {
         const delay = code === 500 ? 120000 : 5000;
-        console.log(`⏳ Waiting ${delay / 1000}s before reconnecting...`);
+        console.log(`Waiting ${delay / 1000}s before reconnecting...`);
         setTimeout(startBot, delay);
       } else {
-        console.log('🚫 Logged out. Clear SESSION_DATA and restart.');
+        console.log('Logged out. Clear SESSION_DATA and restart.');
       }
     }
     if (connection === 'open') {
-      console.log('✅ Bot connected! Send !help to test.');
+      console.log('Bot connected! Send !help to test.');
+      // Save session immediately on successful connection
+      saveSession();
       try {
         const myJid = sock.user.id.replace(/:\d+/, '') + '@s.whatsapp.net';
         await sock.sendMessage(myJid, {
-          text: `🤖 *Connected by Mungai Yobih*\n\n✅ Bot is online and ready!\n\n_Type !help to see all commands_`
+          text: `*Connected by Mungai Yobih*\n\nBot is online and ready!\n\n_Type !help to see all commands_`
         });
       } catch (e) {
         console.error('Failed to send connect message:', e.message);
@@ -116,7 +127,7 @@ async function startBot() {
             await sock.sendMessage(msg.key.remoteJid, {
               image: { url: viewOnceMsg.imageMessage.url },
               mimetype: viewOnceMsg.imageMessage.mimetype,
-              caption: `👁️ *View Once Opened*\nFrom: @${senderNum}`,
+              caption: `*View Once Opened*\nFrom: @${senderNum}`,
               mentions: [sender],
             });
           }
@@ -124,7 +135,7 @@ async function startBot() {
             await sock.sendMessage(msg.key.remoteJid, {
               video: { url: viewOnceMsg.videoMessage.url },
               mimetype: viewOnceMsg.videoMessage.mimetype,
-              caption: `👁️ *View Once Opened*\nFrom: @${senderNum}`,
+              caption: `*View Once Opened*\nFrom: @${senderNum}`,
               mentions: [sender],
             });
           }
@@ -158,13 +169,13 @@ async function startBot() {
         const num = jid.split('@')[0];
         if (action === 'add' && welcomeEnabled[id]) {
           await sock.sendMessage(id, {
-            text: `👋 *Welcome to the group!*\n\n@${num} has joined! 🎉`,
+            text: `*Welcome to the group!*\n\n@${num} has joined!`,
             mentions: [jid],
           });
         }
         if (action === 'remove' && goodbyeEnabled[id]) {
           await sock.sendMessage(id, {
-            text: `👋 *Goodbye!*\n\n@${num} has left the group. 😢`,
+            text: `*Goodbye!*\n\n@${num} has left the group.`,
             mentions: [jid],
           });
         }
