@@ -7,7 +7,7 @@
     "heroku-postbuild": "pip install yt-dlp -U --quiet || true"
   },
   "engines": {
-    "node": ">=18.0.0",
+    "node": "20.x",
     "python": "3.x"
   },
   "dependencies": {
