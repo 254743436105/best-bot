@@ -1,6 +1,7 @@
 require('dotenv').config();
 const http = require('http');
 const { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, isJidBroadcast } = require('@whiskeysockets/baileys');
+const { SocksProxyAgent } = require('socks-proxy-agent');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 const { handleMessage }              = require('./handlers/messageHandler');
@@ -11,13 +12,6 @@ const { cacheMessage, handleDelete } = require('./handlers/antideleteHandler');
 const { restoreSession }             = require('./session-manager');
 const cron = require('node-cron');
 const fs   = require('fs');
-
-// Fixie proxy for Heroku
-if (process.env.FIXIE_URL) {
-  process.env.HTTPS_PROXY = process.env.FIXIE_URL;
-  process.env.HTTP_PROXY = process.env.FIXIE_URL;
-  console.log('🌐 Fixie proxy enabled');
-}
 
 const AUTH_DIR = './auth_info';
 const PORT = process.env.PORT || 3000;
@@ -49,6 +43,13 @@ async function startBot() {
 
   console.log(`🤖 Starting WhatsApp Bot (Baileys v${version.join('.')})`);
 
+  // Setup proxy agent for WebSocket
+  let agent;
+  if (process.env.QUOTAGUARDSTATIC_URL) {
+    agent = new SocksProxyAgent(process.env.QUOTAGUARDSTATIC_URL);
+    console.log('🌐 QuotaGuard proxy enabled');
+  }
+
   const sock = makeWASocket({
     version,
     auth:    state,
@@ -59,6 +60,7 @@ async function startBot() {
     connectTimeoutMs: 60000,
     keepAliveIntervalMs: 10000,
     retryRequestDelayMs: 250,
+    agent: agent,
   });
 
   sock.ev.on('creds.update', saveCreds);
