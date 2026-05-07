@@ -1,7 +1,6 @@
 require('dotenv').config();
 const http = require('http');
 const { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, isJidBroadcast } = require('@whiskeysockets/baileys');
-const { SocksProxyAgent } = require('socks-proxy-agent');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 const { handleMessage }              = require('./handlers/messageHandler');
@@ -43,13 +42,6 @@ async function startBot() {
 
   console.log(`🤖 Starting WhatsApp Bot (Baileys v${version.join('.')})`);
 
-  // Setup proxy agent for WebSocket
-  let agent;
-  if (process.env.QUOTAGUARDSTATIC_URL) {
-    agent = new SocksProxyAgent(process.env.QUOTAGUARDSTATIC_URL);
-    console.log('🌐 QuotaGuard proxy enabled');
-  }
-
   const sock = makeWASocket({
     version,
     auth:    state,
@@ -60,7 +52,6 @@ async function startBot() {
     connectTimeoutMs: 60000,
     keepAliveIntervalMs: 10000,
     retryRequestDelayMs: 250,
-    agent: agent,
   });
 
   sock.ev.on('creds.update', saveCreds);
