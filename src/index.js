@@ -1,27 +1,42 @@
 require('dotenv').config();
 const http = require('http');
 const crypto = require('crypto');
-const { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, isJidBroadcast } = require('@whiskeysockets/baileys');
+const fs = require('fs');
+const {
+  makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+  isJidBroadcast,
+  Browsers,
+} = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
+const cron = require('node-cron');
 const { handleMessage } = require('./handlers/messageHandler');
 const { loadReminders, checkReminders } = require('./handlers/reminderHandler');
 const { handleStatus } = require('./handlers/statusHandler');
 const { handleStatusSave } = require('./handlers/statusSaveHandler');
 const { cacheMessage, handleDelete } = require('./handlers/antideleteHandler');
 const { restoreSession, saveSession } = require('./session-manager');
-const cron = require('node-cron');
-const fs = require('fs');
 
 const AUTH_DIR = './auth_info';
 const PORT = process.env.PORT || 3000;
 const BOT_NAME = 'ADEZ NEXUS';
-const OWNER_NAME = 'Arnold Adez';
-const OWNER_CONTACT = '+254111783552';
-const OWNER_NUMBERS = new Set([
-  String(process.env.OWNER_NUMBER || '+254111783552').replace(/\D/g, ''),
-  '254714850786',
-]);
+const OWNER_NAME = process.env.OWNER_NAME || 'Arnold Adez';
+const OWNER_CONTACT = process.env.OWNER_CONTACT || '';
+
+// Comma-separated list, digits only, e.g. OWNER_NUMBERS=254111783552,254714850786
+const OWNER_NUMBERS = new Set(
+  String(process.env.OWNER_NUMBERS || process.env.OWNER_NUMBER || '')
+    .split(',')
+    .map(n => n.replace(/\D/g, ''))
+    .filter(Boolean)
+);
+if (OWNER_NUMBERS.size === 0) {
+  console.warn('⚠️ No OWNER_NUMBERS set. Pairing will reject every number.');
+}
+
 const PAIRING_SITE_TOKEN = process.env.PAIRING_SITE_TOKEN || '';
 const PAIRING_PAGE = `<!doctype html>
 <html lang="en">
@@ -63,6 +78,7 @@ const PAIRING_PAGE = `<!doctype html>
 </script></body></html>`;
 
 let pairingSocket = null;
+let pairingReady = false; // true only once WhatsApp's handshake is done (qr emitted or connection open)
 let pairingRegistered = false;
 let lastPairingRequestAt = 0;
 const pairingAttempts = new Map();
@@ -121,23 +137,43 @@ const server = http.createServer((req, res) => {
   if (attempts.count >= 3) return sendJson(res, 429, { error: 'Too many requests. Try again later.' });
 
   let rawBody = '';
+  let tooLarge = false;
   req.on('data', chunk => {
+    if (tooLarge) return;
     rawBody += chunk;
-    if (rawBody.length > 2048) req.destroy();
+    if (rawBody.length > 2048) {
+      tooLarge = true;
+      sendJson(res, 413, { error: 'Request too large.' });
+    }
   });
+
   req.on('end', async () => {
+    if (tooLarge) return;
+
     let body;
     try { body = JSON.parse(rawBody); } catch { return sendJson(res, 400, { error: 'Invalid request.' }); }
+
     const phone = String(body.phone || '').replace(/\D/g, '');
-    if (!/^\d{8,15}$/.test(phone)) return sendJson(res, 400, { error: 'Enter a valid phone number in international format.' });
-    if (!OWNER_NUMBERS.has(phone)) return sendJson(res, 403, { error: 'Only the allowed owner numbers can pair this bot.' });
-    if (!pairingSocket) return sendJson(res, 503, { error: 'Bot is still starting. Try again shortly.' });
-    if (pairingRegistered) return sendJson(res, 409, { error: 'This bot is already paired. Clear its session before pairing another account.' });
-    if (now - lastPairingRequestAt < 60 * 1000) return sendJson(res, 429, { error: 'Please wait one minute before requesting another code.' });
+    if (!/^\d{8,15}$/.test(phone)) {
+      return sendJson(res, 400, { error: 'Enter a valid phone number in international format.' });
+    }
+    if (!OWNER_NUMBERS.has(phone)) {
+      return sendJson(res, 403, { error: 'Only the allowed owner numbers can pair this bot.' });
+    }
+    if (!pairingSocket || !pairingReady) {
+      return sendJson(res, 503, { error: 'Bot is still connecting to WhatsApp. Wait a few seconds and try again.' });
+    }
+    if (pairingRegistered) {
+      return sendJson(res, 409, { error: 'This bot is already paired. Clear its session before pairing another account.' });
+    }
+    if (now - lastPairingRequestAt < 60 * 1000) {
+      return sendJson(res, 429, { error: 'Please wait one minute before requesting another code.' });
+    }
 
     attempts.count += 1;
     pairingAttempts.set(ip, attempts);
     lastPairingRequestAt = now;
+
     try {
       const code = await pairingSocket.requestPairingCode(phone);
       return sendJson(res, 200, { code });
@@ -147,14 +183,14 @@ const server = http.createServer((req, res) => {
     }
   });
 });
+
 server.listen(PORT, () => console.log(`HTTP server listening on port ${PORT}`));
 
 setInterval(() => {
-  http.get(`http://localhost:${PORT}/health`, () => {});
+  http.get(`http://localhost:${PORT}/health`, res => res.resume()).on('error', () => {});
 }, 5 * 60 * 1000);
 
 async function startBot() {
-  restoreSession();
   if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
@@ -167,14 +203,16 @@ async function startBot() {
     version,
     auth: state,
     logger: pino({ level: 'silent' }),
-    browser: ['Ubuntu', 'Chrome', '20.0.04'],
+    browser: Browsers.macOS('Safari'), // -> ['Mac OS', 'Safari', '10.15.7']
     getMessage: async () => ({ conversation: '' }),
     shouldIgnoreJid: jid => isJidBroadcast(jid),
     connectTimeoutMs: 60000,
     keepAliveIntervalMs: 10000,
     retryRequestDelayMs: 250,
   });
+
   pairingSocket = sock;
+  pairingReady = false;
 
   sock.ev.on('creds.update', async () => {
     pairingRegistered = Boolean(state.creds.registered);
@@ -184,30 +222,40 @@ async function startBot() {
 
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
+      pairingReady = true;
       console.log(`\nScan this QR code with WhatsApp for ${BOT_NAME}:\n`);
       qrcode.generate(qr, { small: true });
     }
+
+    if (connection === 'open') pairingReady = true;
+
     if (connection === 'close') {
+      pairingReady = false;
+      pairingSocket = null;
+
       const code = lastDisconnect?.error?.output?.statusCode;
       const shouldReconnect = code !== DisconnectReason.loggedOut;
       console.log(`Connection closed (code ${code}). Reconnecting: ${shouldReconnect}`);
+
       if (shouldReconnect) {
         const delay = code === 500 ? 120000 : 5000;
         console.log(`Waiting ${delay / 1000}s before reconnecting...`);
         setTimeout(startBot, delay);
       } else {
         pairingRegistered = false;
-        console.log('Logged out. Clear SESSION_DATA and restart.');
+        console.log('Logged out. Clear SESSION_ID and restart.');
       }
     }
+
     if (connection === 'open') {
       pairingRegistered = true;
       console.log(`${BOT_NAME} connected! Send !help to test.`);
       saveSession();
       try {
         const myJid = sock.user.id.replace(/:\d+/, '') + '@s.whatsapp.net';
+        const contactLine = OWNER_CONTACT ? `\nContact: ${OWNER_CONTACT}` : '';
         await sock.sendMessage(myJid, {
-          text: `*${BOT_NAME} Online*\n\nOwner: ${OWNER_NAME}\nContact: ${OWNER_CONTACT}\n\nBot is online and ready!\n\n_Type !help to see all commands_`
+          text: `*${BOT_NAME} Online*\n\nOwner: ${OWNER_NAME}${contactLine}\n\nBot is online and ready!\n\n_Type !help to see all commands_`,
         });
       } catch (e) {
         console.error('Failed to send connect message:', e.message);
@@ -267,7 +315,7 @@ async function startBot() {
     }
   });
 
-  sock.ev.on('messages.update', async (updates) => {
+  sock.ev.on('messages.update', async updates => {
     const deleted = updates.filter(u =>
       u.update?.messageStubType === 1 ||
       u.update?.message === null
@@ -301,4 +349,6 @@ async function startBot() {
   cron.schedule('* * * * *', () => checkReminders(sock));
 }
 
+// Restore the saved session once at startup, never on reconnect.
+restoreSession();
 startBot().catch(console.error);
