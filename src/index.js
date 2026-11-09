@@ -67,11 +67,6 @@ function readJson(req, res, handler) {
   });
 }
 
-function clientIp(req) {
-  const forwarded = req.headers['x-forwarded-for'];
-  return (forwarded ? String(forwarded).split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
-}
-
 function isPairedOnDisk() {
   try {
     const creds = JSON.parse(fs.readFileSync(path.join(AUTH_DIR, 'creds.json'), 'utf8'));
@@ -86,6 +81,13 @@ function endMainSocket() {
     try { mainSock.end(undefined); } catch {}
     mainSock = null;
   }
+}
+
+function clearSession(message) {
+  botPaired = false;
+  endMainSocket();
+  fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+  console.log(message);
 }
 
 async function sendOnlineMessage(sock) {
@@ -127,7 +129,6 @@ const server = http.createServer((req, res) => {
     return sendJson(res, 200, {
       paired: botPaired,
       active: pairing.activeCount(),
-      max: pairing.MAX_ACTIVE,
     });
   }
 
@@ -141,7 +142,7 @@ const server = http.createServer((req, res) => {
           return sendJson(res, 400, { error: 'Enter a valid phone number with country code, digits only.' });
         }
       }
-      const session = await pairing.createSession({ type, phone, ip: clientIp(req) });
+      const session = await pairing.createSession({ type, phone });
       return sendJson(res, 202, pairing.view(session));
     });
   }
@@ -210,7 +211,10 @@ async function startBot() {
       saveSession();
       if (!announced) {
         announced = true;
-        sendOnlineMessage(sock);
+        // Wait a few seconds so the connection is fully ready before sending.
+        setTimeout(() => {
+          if (gen === mainGen) sendOnlineMessage(sock);
+        }, 5000);
       }
     }
 
@@ -219,18 +223,19 @@ async function startBot() {
       console.log(`Connection closed (code ${code}).`);
 
       if (code === DisconnectReason.loggedOut) {
-        botPaired = false;
-        mainSock = null;
-        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-        console.log('Logged out from WhatsApp. The session was cleared. Open the pairing page to link again.');
-        return;
+        return clearSession('Logged out from WhatsApp. Session cleared. Open the pairing page to link again.');
       }
 
-      const delay = code === 500 ? 120000 : 5000;
-      console.log(`Reconnecting in ${delay / 1000}s...`);
+      if (code === DisconnectReason.badSession) {
+        return clearSession(
+          'Saved session is corrupt (code 500). Session cleared. Remove SESSION_ID in your host dashboard, then pair again.'
+        );
+      }
+
+      console.log('Reconnecting in 5s...');
       setTimeout(() => {
         if (gen === mainGen) startBot().catch(err => console.error('Restart failed:', err.message));
-      }, delay);
+      }, 5000);
     }
   });
 
@@ -331,6 +336,10 @@ pairing.init({
   getVersion: () => version,
   isBotPaired: () => botPaired,
   onLinked: async pairDir => {
+    // Only the first pairing that links may become the bot's account.
+    if (botPaired) {
+      throw new Error('The bot was already linked by another pairing.');
+    }
     fs.rmSync(AUTH_DIR, { recursive: true, force: true });
     fs.cpSync(pairDir, AUTH_DIR, { recursive: true });
     console.log('✅ Linked successfully. Starting the bot...');
