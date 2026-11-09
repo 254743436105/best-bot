@@ -11,5 +11,7 @@ services:
         value: Africa/Nairobi
       - key: SESSION_DATA
         value: ""
+      - key: PAIRING_SITE_TOKEN
+        generateValue: true
       - key: NODE_ENV
         value: production
