@@ -9,7 +9,7 @@ services:
         value: "!"
       - key: TIMEZONE
         value: Africa/Nairobi
-      - key: SESSION_DATA
+      - key: SESSION_ID
         value: ""
       - key: PAIRING_SITE_TOKEN
         generateValue: true
