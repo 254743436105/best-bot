@@ -18,7 +18,9 @@ const PORT = process.env.PORT || 3000;
 const BOT_NAME = 'ADEZ NEXUS';
 const OWNER_NAME = 'Arnold Adez';
 const OWNER_CONTACT = '+254111783552';
+const OWNER_NUMBER = String(process.env.OWNER_NUMBER || '+254111783552').replace(/\D/g, '');
 const PAIRING_SITE_TOKEN = process.env.PAIRING_SITE_TOKEN || '';
+
 const BLUE_PAIR_PAGE = `<!doctype html>
 <html lang="en">
 <head>
@@ -45,7 +47,7 @@ const BLUE_PAIR_PAGE = `<!doctype html>
       min-height: 100vh;
       display: grid;
       place-items: center;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: linear-gradient(135deg, var(--bg), var(--bg2));
       color: var(--text);
       padding: 24px;
@@ -167,12 +169,10 @@ const BLUE_PAIR_PAGE = `<!doctype html>
         <form id="pair-form">
           <label for="phone">WhatsApp number (international format)</label>
           <input id="phone" name="phone" inputmode="numeric" autocomplete="tel" placeholder="254..." required pattern="[0-9]{8,15}">
-          <label for="token">Pairing token</label>
-          <input id="token" name="token" type="password" autocomplete="current-password" required>
           <button id="submit" type="submit">Generate pairing code</button>
         </form>
         <div id="result" aria-live="polite">Ready to generate a pairing code.</div>
-        <div class="hint">Keep your pairing token and code private. The code is only valid for a short time.</div>
+        <div class="hint">This page is limited to the owner number: +254111783552.</div>
       </div>
       <div class="panel qr-wrap">
         <canvas id="qrCanvas"></canvas>
@@ -183,7 +183,6 @@ const BLUE_PAIR_PAGE = `<!doctype html>
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.5.4/qrcode.min.js"></script>
   <script>
     const form = document.querySelector('#pair-form');
-    const tokenInput = document.querySelector('#token');
     const result = document.querySelector('#result');
     const qrCanvas = document.querySelector('#qrCanvas');
 
@@ -221,10 +220,11 @@ const BLUE_PAIR_PAGE = `<!doctype html>
       qrCanvas.style.display = 'none';
 
       try {
+        const phone = document.querySelector('#phone').value.replace(/\D/g, '');
         const response = await fetch('/api/pair', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tokenInput.value },
-          body: JSON.stringify({ phone: document.querySelector('#phone').value })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone })
         });
         const data = await response.json();
         if (!response.ok) {
@@ -264,11 +264,9 @@ const PAIRING_PAGE = `<!doctype html>
   <form id="pair-form">
     <label for="phone">WhatsApp phone number (international format, digits only)</label>
     <input id="phone" name="phone" inputmode="numeric" autocomplete="tel" placeholder="254..." required pattern="[0-9]{8,15}">
-    <label for="token">Pairing site access token</label>
-    <input id="token" name="token" type="password" autocomplete="current-password" required>
     <button id="submit" type="submit">Generate pairing code</button>
   </form>
-  <p class="hint">Keep your access token and pairing code private. The code expires; enter it in WhatsApp's Linked devices flow.</p>
+  <p class="hint">This pairing form is limited to the owner number: +254111783552.</p>
   <div id="result" role="status" aria-live="polite"></div>
 </main>
 <script>
@@ -276,7 +274,8 @@ const PAIRING_PAGE = `<!doctype html>
   form.addEventListener('submit',async event=>{
     event.preventDefault(); button.disabled=true; result.textContent='Requesting a pairing code…';
     try{
-      const response=await fetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+form.token.value},body:JSON.stringify({phone:form.phone.value})});
+      const phone = form.phone.value.replace(/\D/g, '');
+      const response=await fetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone})});
       const data=await response.json(); result.textContent=response.ok?'Pairing code: '+data.code:(data.error||'Unable to create pairing code.');
     }catch{result.textContent='Request failed. Please try again later.'}
     finally{button.disabled=false}
@@ -329,15 +328,16 @@ const server = http.createServer((req, res) => {
     return sendJson(res, 404, { error: 'Not found.' });
   }
 
-  if (!PAIRING_SITE_TOKEN || PAIRING_SITE_TOKEN.length < 32) {
-    return sendJson(res, 503, { error: 'Pairing is unavailable. The owner must configure a strong PAIRING_SITE_TOKEN.' });
-  }
-
-  const suppliedToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  const expected = Buffer.from(PAIRING_SITE_TOKEN);
-  const supplied = Buffer.from(suppliedToken);
-  if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
-    return sendJson(res, 401, { error: 'Unauthorized.' });
+  if (PAIRING_SITE_TOKEN && PAIRING_SITE_TOKEN.length >= 32) {
+    const suppliedToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!suppliedToken) {
+      return sendJson(res, 401, { error: 'Unauthorized.' });
+    }
+    const expected = Buffer.from(PAIRING_SITE_TOKEN);
+    const supplied = Buffer.from(suppliedToken);
+    if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+      return sendJson(res, 401, { error: 'Unauthorized.' });
+    }
   }
 
   const ip = req.socket.remoteAddress || 'unknown';
@@ -347,7 +347,7 @@ const server = http.createServer((req, res) => {
     attempts.count = 0;
     attempts.resetAt = now + 10 * 60 * 1000;
   }
-  if (attempts.count >= 3) return sendJson(res, 429, { error: 'Too many requests. Try again later.' });
+  if (attempts.count >= 5) return sendJson(res, 429, { error: 'Too many requests. Try again later.' });
 
   let rawBody = '';
   req.on('data', chunk => {
@@ -359,6 +359,7 @@ const server = http.createServer((req, res) => {
     try { body = JSON.parse(rawBody); } catch { return sendJson(res, 400, { error: 'Invalid request.' }); }
     const phone = String(body.phone || '').replace(/\D/g, '');
     if (!/^\d{8,15}$/.test(phone)) return sendJson(res, 400, { error: 'Enter a valid phone number in international format.' });
+    if (phone !== OWNER_NUMBER) return sendJson(res, 403, { error: 'Only the owner number is allowed to pair this bot.' });
     if (!pairingSocket) return sendJson(res, 503, { error: 'Bot is still starting. Try again shortly.' });
     if (pairingRegistered) return sendJson(res, 409, { error: 'This bot is already paired. Clear its session before pairing another account.' });
     if (now - lastPairingRequestAt < 60 * 1000) return sendJson(res, 429, { error: 'Please wait one minute before requesting another code.' });
