@@ -26,12 +26,15 @@ const OWNER_NAME = process.env.OWNER_NAME || 'Arnold Adez';
 const OWNER_CONTACT = process.env.OWNER_CONTACT || '';
 const PAIR_PAGE = fs.readFileSync(path.join(__dirname, 'pairing', 'pair-page.html'), 'utf8');
 
-let mainSock = null;   // the bot's live WhatsApp connection (null until paired)
-let mainGen = 0;       // increments on every (re)start; old connections are ignored
+const MAX_BAD_SESSION_RETRIES = 3;
+
+let mainSock = null;          // the bot's live WhatsApp connection (null until paired)
+let mainGen = 0;              // increments on every (re)start; old connections are ignored
 let botPaired = false;
-let connected = false; // true only while the WhatsApp connection is open
-let version;           // Baileys protocol version, fetched once at boot
-let announced = false; // "Online" message is sent only once per process
+let connected = false;        // true only while the WhatsApp connection is open
+let badSessionRetries = 0;    // code-500 retries since the last successful connection
+let version;                  // Baileys protocol version, fetched once at boot
+let announced = false;        // "Online" message is sent only once per process
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -89,6 +92,7 @@ function endMainSocket() {
 function clearSession(message) {
   botPaired = false;
   connected = false;
+  badSessionRetries = 0;
   endMainSocket();
   fs.rmSync(AUTH_DIR, { recursive: true, force: true });
   console.log(message);
@@ -214,6 +218,7 @@ async function startBot() {
 
     if (connection === 'open') {
       connected = true;
+      badSessionRetries = 0;
       console.log(`${BOT_NAME} connected! Send !help to test.`);
       saveSession();
       if (!announced) {
@@ -228,15 +233,31 @@ async function startBot() {
     if (connection === 'close') {
       connected = false;
       const code = lastDisconnect?.error?.output?.statusCode;
-      console.log(`Connection closed (code ${code}).`);
+      const reason = lastDisconnect?.error?.message || 'no details';
+      console.log(`Connection closed (code ${code}): ${reason}`);
 
       if (code === DisconnectReason.loggedOut) {
         return clearSession('Logged out from WhatsApp. Session cleared. Open the pairing page to link again.');
       }
 
       if (code === DisconnectReason.badSession) {
+        // Keep the saved keys: a freshly linked device is often rejected once
+        // while WhatsApp finishes registering it. Retry with a longer wait each time.
+        badSessionRetries += 1;
+        if (badSessionRetries <= MAX_BAD_SESSION_RETRIES) {
+          const wait = 30000 * badSessionRetries;
+          console.log(
+            `WhatsApp rejected the session (code 500). Keeping the saved keys. ` +
+            `Retry ${badSessionRetries}/${MAX_BAD_SESSION_RETRIES} in ${wait / 1000}s...`
+          );
+          setTimeout(() => {
+            if (gen === mainGen) startBot().catch(err => console.error('Restart failed:', err.message));
+          }, wait);
+          return;
+        }
         return clearSession(
-          'Saved session is corrupt (code 500). Session cleared. Remove SESSION_ID in your host dashboard, then pair again.'
+          'WhatsApp still rejects the session after 3 retries (code 500). Session cleared. ' +
+          'Restore SESSION_ID from a working session, or pair again.'
         );
       }
 
