@@ -1,24 +1,40 @@
 {
-  "name": "whatsapp-personal-assistant-bot",
-  "version": "1.0.0",
-  "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
-    "heroku-postbuild": "pip install yt-dlp -U --quiet || true"
+  "name": "ADEZ NEXUS WhatsApp Bot",
+  "description": "A personal assistant WhatsApp bot with reminders, weather, music, auto-status view and more. Open the app URL to pair your WhatsApp number.",
+  "keywords": ["whatsapp", "bot", "assistant", "nodejs"],
+  "env": {
+    "PREFIX": {
+      "description": "Command prefix (default is !)",
+      "value": "!",
+      "required": false
+    },
+    "TIMEZONE": {
+      "description": "Your timezone, e.g. Africa/Nairobi",
+      "value": "Africa/Nairobi",
+      "required": false
+    },
+    "OWNER_NAME": {
+      "description": "Your name, shown in the bot's connected message",
+      "value": "Arnold Adez",
+      "required": false
+    },
+    "OWNER_CONTACT": {
+      "description": "Your contact number, shown in the bot's connected message (optional)",
+      "required": false
+    },
+    "SESSION_ID": {
+      "description": "Filled in after your first pairing so the WhatsApp session survives restarts. Leave empty for the first deploy.",
+      "required": false
+    }
   },
-  "engines": {
-    "node": "20.x",
-    "python": "3.x"
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
   },
-  "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.9",
-    "axios": "^1.7.2",
-    "dotenv": "^16.4.5",
-    "node-cron": "^3.0.3",
-    "pino": "^9.3.1",
-    "qrcode-terminal": "^0.12.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.4"
-  }
+  "buildpacks": [
+    { "url": "heroku/python" },
+    { "url": "heroku/nodejs" }
+  ]
 }
