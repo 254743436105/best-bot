@@ -32,6 +32,8 @@ let botPaired = false;
 let version;           // Baileys protocol version, fetched once at boot
 let announced = false; // "Online" message is sent only once per process
 
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 // ── helpers ───────────────────────────────────────────────────────
 
 function sendJson(res, status, body) {
@@ -336,15 +338,17 @@ pairing.init({
   getVersion: () => version,
   isBotPaired: () => botPaired,
   onLinked: async pairDir => {
-    // Only the first pairing that links may become the bot's account.
     if (botPaired) {
       throw new Error('The bot was already linked by another pairing.');
     }
     fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-    fs.cpSync(pairDir, AUTH_DIR, { recursive: true });
-    console.log('✅ Linked successfully. Starting the bot...');
-    console.log('To keep this session after restarts, set SESSION_ID. In a shell run: tar -czf - auth_info | base64 -w 0');
+    // Move, don't copy: the keys stay exactly as WhatsApp wrote them.
+    fs.renameSync(pairDir, AUTH_DIR);
+    console.log('✅ Linked successfully. Waiting 5s for WhatsApp to finish registering this device...');
+    await sleep(5000);
+    console.log('Starting the bot...');
     await startBot();
+    console.log('Keep it running for a few minutes. If it stays connected, set SESSION_ID now.');
   },
 });
 
