@@ -93,7 +93,7 @@ async function startBot() {
       try {
         const myJid = sock.user.id.replace(/:\d+/, '') + '@s.whatsapp.net';
         await sock.sendMessage(myJid, {
-          text: `*Connected by Mungai Yobih*\n\nBot is online and ready!\n\n_Type !help to see all commands_`
+          text: `*Connected by Arnold Adez*\n\nBot is online and ready!\n\n_Type !help to see all commands_`
         });
       } catch (e) {
         console.error('Failed to send connect message:', e.message);
