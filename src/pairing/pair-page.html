@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ADEZ NEXUS · Link WhatsApp</title>
 <style>
   :root{
@@ -41,13 +41,13 @@
   .btn{margin-top:14px;width:100%;padding:13px;border:0;border-radius:11px;cursor:pointer;
        background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;font:inherit;font-weight:700}
   .btn:hover{filter:brightness(1.08)}
-  .btn:disabled{opacity:.55;cursor:not-allowed}
+  .btn:disabled{opacity:.55;cursor:not-allowed;filter:none}
   .note{font-size:.88rem;color:var(--muted);margin:14px 0 0}
   .warn{color:var(--warn)}
   #cards{display:grid;gap:14px;margin-top:24px}
   .empty{color:var(--muted);text-align:center;padding:18px 0;margin:18px 0 0}
   .card{background:#0a1f47;border:1px solid var(--line);border-radius:16px;padding:18px}
-  .card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+  .card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
   .card-title{font-weight:700}
   .badge{font-size:.78rem;padding:4px 10px;border-radius:999px;background:rgba(96,165,250,.15);color:var(--accent-2)}
   .badge.waiting{background:rgba(251,191,36,.12);color:var(--warn)}
@@ -62,7 +62,7 @@
   .icon-btn.done{background:var(--ok);border-color:var(--ok);color:#06140e}
   .icon-btn svg{width:20px;height:20px}
   .qr-wrap{display:block;width:fit-content;margin:6px auto 0;background:#fff;border-radius:14px;padding:14px}
-  .qr-wrap img{display:block;width:240px;height:240px}
+  .qr-wrap img{display:block;width:240px;height:240px;max-width:100%}
   .hint{color:var(--muted);font-size:.9rem;margin:12px 0 0}
   .card-foot{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:.85rem;color:var(--muted)}
   .link{background:none;border:0;color:var(--bad);cursor:pointer;font:inherit;font-weight:600;padding:4px 0}
@@ -89,11 +89,11 @@
     <p class="lead">Create as many pairing codes or QR codes as you need. The first one that links becomes the bot's account.</p>
 
     <div class="tabs" role="tablist">
-      <button class="tab" role="tab" id="tab-code" aria-selected="true" aria-controls="panel-code">Pairing code</button>
-      <button class="tab" role="tab" id="tab-qr" aria-selected="false" aria-controls="panel-qr">QR code</button>
+      <button class="tab" role="tab" id="tab-code" aria-selected="true" aria-controls="panel-code" type="button">Pairing code</button>
+      <button class="tab" role="tab" id="tab-qr" aria-selected="false" aria-controls="panel-qr" type="button">QR code</button>
     </div>
 
-    <form id="panel-code" role="tabpanel" aria-labelledby="tab-code">
+    <form id="panel-code" role="tabpanel" aria-labelledby="tab-code" autocomplete="off">
       <label for="phone">Your WhatsApp number (country code first)</label>
       <input id="phone" name="phone" inputmode="tel" autocomplete="tel" placeholder="254712345678" required>
       <button class="btn" type="submit">Get pairing code</button>
@@ -102,7 +102,7 @@
 
     <div id="panel-qr" role="tabpanel" aria-labelledby="tab-qr" hidden>
       <button class="btn" id="qrBtn" type="button">Generate QR code</button>
-      <p class="note">In WhatsApp: Settings → Linked devices → Link a device, then scan the code. It refreshes automatically.</p>
+      <p class="note">In WhatsApp: Settings → Linked devices → Link a device, then scan the code.</p>
     </div>
 
     <p class="note warn">Only link a WhatsApp number you own. While the bot is unpaired, anyone who has a code or QR can link it.</p>
@@ -172,15 +172,24 @@
   function hintFor(v) {
     if (v.status === 'linked') return 'Linked! The bot is starting with this account.';
     if (FINAL.has(v.status)) return v.error || LABELS[v.status];
-    if (v.type === 'code') return v.code ? 'Type this code in WhatsApp now. Codes expire quickly.' : 'Asking WhatsApp for a code…';
-    return v.qr ? 'Scan with WhatsApp: Linked devices → Link a device.' : 'Preparing QR code…';
+    if (v.type === 'code') {
+      return v.code
+        ? 'Type this code in WhatsApp now. Codes expire quickly.'
+        : 'Asking WhatsApp for a code…';
+    }
+    return v.qr
+      ? 'Scan with WhatsApp: Linked devices → Link a device.'
+      : 'Preparing QR code…';
   }
 
   function renderTimer(c) {
-    const left = c.view.expiresAt - Date.now();
     const timer = c.el.querySelector('.timer');
-    if (FINAL.has(c.view.status)) timer.textContent = '';
-    else timer.textContent = left > 0 ? `Expires in ${formatLeft(left)}` : 'Expiring…';
+    if (FINAL.has(c.view.status)) {
+      timer.textContent = '';
+      return;
+    }
+    const left = c.view.expiresAt - Date.now();
+    timer.textContent = left > 0 ? `Expires in ${formatLeft(left)}` : 'Expiring…';
   }
 
   function update(view) {
@@ -205,9 +214,7 @@
     if (view.qr) qrWrap.querySelector('img').src = view.qr;
 
     el.querySelector('.hint').textContent = hintFor(view);
-
-    const cancelBtn = el.querySelector('.cancel');
-    cancelBtn.textContent = FINAL.has(view.status) ? 'Remove' : 'Cancel';
+    el.querySelector('.cancel').textContent = FINAL.has(view.status) ? 'Remove' : 'Cancel';
 
     renderTimer(c);
   }
@@ -220,7 +227,7 @@
     }
   }
 
-  function poll(id) {
+  function startPoll(id) {
     const c = cards.get(id);
     if (!c || c.poll) return;
     c.poll = setInterval(async () => {
@@ -234,21 +241,32 @@
     }, 2000);
   }
 
-  async function copyCode(btn, id) {
-    const c = cards.get(id);
-    const text = c && c.view.code;
-    if (!text) return;
+  async function copyText(text) {
     try {
       await navigator.clipboard.writeText(text);
+      return true;
     } catch {
       const ta = document.createElement('textarea');
       ta.value = text;
+      ta.setAttribute('readonly', '');
       ta.style.position = 'fixed';
       ta.style.opacity = '0';
       document.body.appendChild(ta);
       ta.select();
-      document.execCommand('copy');
+      const ok = document.execCommand('copy');
       ta.remove();
+      return ok;
+    }
+  }
+
+  async function copyCode(btn, id) {
+    const c = cards.get(id);
+    const text = c && c.view.code;
+    if (!text) return;
+    const ok = await copyText(text);
+    if (!ok) {
+      toast('Copy failed. Select the code and copy it manually.');
+      return;
     }
     btn.innerHTML = ICON_CHECK;
     btn.classList.add('done');
@@ -293,7 +311,7 @@
     cards.set(view.id, { el: node, view, poll: null });
     $('#empty').hidden = true;
     update(view);
-    poll(view.id);
+    startPoll(view.id);
   }
 
   async function create(path, body, button) {
@@ -316,7 +334,7 @@
       toast('Enter a valid number with country code, digits only.');
       return;
     }
-    create('/api/pair', { phone }, event.submitter || event.target.querySelector('button'));
+    create('/api/pair', { phone }, event.target.querySelector('button[type="submit"]'));
   });
 
   $('#qrBtn').addEventListener('click', event => {
@@ -337,15 +355,16 @@
     try {
       const s = await api('/api/status');
       const pill = $('#botPill');
-      pill.textContent = s.paired ? 'Bot paired ✓' : `Not paired · ${s.active}/${s.max} active`;
+      pill.textContent = s.paired ? 'Bot paired ✓' : `Not paired · ${s.active} active`;
       pill.className = 'pill' + (s.paired ? ' ok' : '');
       document.querySelectorAll('.btn').forEach(b => { b.disabled = s.paired; });
     } catch {}
   }
+
   refreshStatus();
   setInterval(refreshStatus, 5000);
   setInterval(() => cards.forEach(renderTimer), 1000);
 })();
 </script>
 </body>
-  </html>
+</html>
