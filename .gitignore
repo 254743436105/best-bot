@@ -1,5 +1,29 @@
+# Dependencies
 node_modules/
-auth_info/
-data/
+
+# Environment and secrets
 .env
+.env.*
+!.env.example
+
+# WhatsApp session and credentials (never commit these)
+auth_info/
+session.txt
+auth.tar.gz
+*.tar.gz
+
+# Bot data and temp files
+data/
+tmp/*
+!tmp/.gitkeep
+!tmp/readme.md
+
+# Logs
 *.log
+npm-debug.log*
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
