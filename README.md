@@ -7,14 +7,14 @@
 1. Push this repo to your own GitHub account
 2. Click the **Deploy to Heroku** button above
 3. Fill in the config vars:
-   - `SESSION_DATA` — paste your session ID here (see below)
+   - `SESSION_ID` — paste your session value here (see below)
    - `TIMEZONE` — e.g. `Africa/Nairobi`
    - `PREFIX` — default is `!`
 4. Click **Deploy App** — done! ✅
 
 ---
 
-## 🔑 How to Get Your SESSION_DATA
+## 🔑 How to Get Your SESSION_ID
 
 Run the bot **once locally** to generate the session:
 
@@ -23,14 +23,14 @@ npm install
 node src/index.js
 ```
 
-Scan the QR code with WhatsApp. Once connected, run:
+Scan the QR code with WhatsApp. Once connected, create an archive of the auth files:
 
 ```bash
 tar -czf auth.tar.gz auth_info/
 base64 auth.tar.gz
 ```
 
-Copy the output and paste it as the `SESSION_DATA` config var on Heroku.
+Store the output as the `SESSION_ID` environment variable in your host dashboard. Treat it as a secret. The app accepts the old `SESSION_DATA` variable as a migration fallback, but use `SESSION_ID` for new deployments.
 
 **On Windows** use Git Bash or WSL to run those commands.
 
@@ -58,11 +58,7 @@ Copy the output and paste it as the `SESSION_DATA` config var on Heroku.
 
 ## 🔄 Session Persistence
 
-After the first QR scan the session is saved automatically to the `SESSION_DATA`
-config var — so the bot reconnects on its own after every dyno restart.
-
-If you ever get logged out, clear `SESSION_DATA` in Heroku Settings → Config Vars
-and restart the dyno.
+Set `SESSION_ID` in your host's environment settings to restore the bot's WhatsApp authentication after a restart. On Render, set the value in the service's **Environment** settings. Environment variables are not written back automatically by the app; store them securely.
 
 ---
 
