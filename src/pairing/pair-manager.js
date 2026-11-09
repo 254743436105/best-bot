@@ -1,8 +1,9 @@
 // src/pairing/pair-manager.js
 // Each pairing request gets its own temporary WhatsApp connection and auth folder.
-// Linking completes when WhatsApp sends a restart (515) or the socket opens.
-// The first pairing that links becomes the bot's account; the others are cancelled
-// before the bot starts, so only one device registers.
+// After the code is entered, WhatsApp sends 515 (restartRequired). The client must
+// reconnect with the same credentials to finish registering the device. Linking is
+// complete only when that reconnected socket opens. Then the credentials are moved
+// into the bot's session, and the other pairings are cancelled.
 
 const fs = require('fs');
 const path = require('path');
@@ -14,20 +15,21 @@ const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whis
 const PAIR_DIR = path.join(process.cwd(), 'pair_sessions');
 const SESSION_TTL_MS = 5 * 60 * 1000;    // how long a code or QR stays usable
 const KEEP_FINISHED_MS = 10 * 60 * 1000; // how long finished entries stay visible
-const MAX_RESTARTS = 5;
+const MAX_RESTARTS = 5;                  // reconnects allowed per pairing
 
-// Default browser identity. Override with PAIR_BROWSER, e.g. "Ubuntu|Chrome|20.0.04".
+// Default browser identity. Override with PAIR_BROWSER, e.g. "Ubuntu|Chrome|22.04.4".
 const PAIR_BROWSER = (process.env.PAIR_BROWSER || 'Mac OS|Safari|10.15.7')
   .split('|')
-  .map(part => part.trim());
+  .map((part) => part.trim());
 
-const ACTIVE = new Set(['starting', 'waiting']);
+// 'linking' = code entered or QR scanned, waiting for WhatsApp to finish registration
+const ACTIVE = new Set(['starting', 'waiting', 'linking']);
 const FINAL = new Set(['linked', 'failed', 'expired', 'cancelled']);
 
 const sessions = new Map();
 let deps = null; // { getVersion, isBotPaired, onLinked }
 
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -65,7 +67,7 @@ async function createSession({ type, phone = null }) {
     id,
     type,                  // 'code' or 'qr'
     phone,
-    status: 'starting',    // starting | waiting | linked | failed | expired | cancelled
+    status: 'starting',    // starting | waiting | linking | linked | failed | expired | cancelled
     code: null,
     qr: null,
     error: null,
@@ -77,7 +79,7 @@ async function createSession({ type, phone = null }) {
     finishing: false,
   };
   sessions.set(id, session);
-  startSocket(session);
+  startSocket(session, type === 'code');
   return session;
 }
 
@@ -105,7 +107,8 @@ function view(s) {
   };
 }
 
-async function startSocket(session) {
+// Creates a socket on this session's folder. Events from older sockets are ignored.
+async function startSocket(session, withCode) {
   if (FINAL.has(session.status)) return;
   try {
     const { state, saveCreds } = await useMultiFileAuthState(session.dir);
@@ -125,12 +128,32 @@ async function startSocket(session) {
 
     session.sock = sock;
     sock.ev.on('creds.update', () => saveCreds().catch(() => {}));
-    sock.ev.on('connection.update', update => onUpdate(session, sock, update));
+    sock.ev.on('connection.update', (update) => {
+      if (session.sock !== sock) return; // a newer socket replaced this one
+      onUpdate(session, sock, update).catch((e) => console.error(`[${session.id}] update error:`, e.message));
+    });
 
-    if (session.type === 'code') requestCode(session, sock, state);
+    if (withCode) requestCode(session, sock, state);
   } catch (err) {
     fail(session, `Could not start pairing: ${err.message}`);
   }
+}
+
+// Replaces the socket on the same folder. Used after 515 and after transient drops.
+async function restartSocket(session, withCode) {
+  if (FINAL.has(session.status)) return;
+  if (session.restarts >= MAX_RESTARTS) {
+    return fail(session, 'Could not reach WhatsApp. Start a new pairing.');
+  }
+  session.restarts += 1;
+
+  const old = session.sock;
+  session.sock = null; // events from the old socket are ignored from now on
+  try { old?.end(undefined); } catch {}
+
+  await sleep(2000);
+  if (FINAL.has(session.status)) return;
+  await startSocket(session, withCode);
 }
 
 async function onUpdate(session, sock, { connection, lastDisconnect, qr }) {
@@ -152,26 +175,28 @@ async function onUpdate(session, sock, { connection, lastDisconnect, qr }) {
 
   if (connection === 'close') {
     const code = lastDisconnect?.error?.output?.statusCode;
-
-    // 515 (restartRequired) is WhatsApp's signal that the link succeeded.
-    if (code === DisconnectReason.restartRequired) {
-      return finishLink(session, sock);
-    }
+    console.log(`[${session.id}] connection closed, code=${code}, status=${session.status}`);
 
     if (code === DisconnectReason.loggedOut) {
       return fail(session, 'WhatsApp rejected this pairing. Start a new one.');
     }
 
-    if (session.restarts >= MAX_RESTARTS) {
-      return fail(session, 'Could not reach WhatsApp. Start a new pairing.');
+    // 515: the code or QR was accepted. Reconnect with the same credentials to finish.
+    if (code === DisconnectReason.restartRequired) {
+      session.status = 'linking';
+      session.code = null;
+      session.qr = null;
+      return restartSocket(session, false);
     }
 
-    session.restarts += 1;
-    session.sock = null;
-    session.status = 'starting';
-    session.code = null; // a fresh code is requested after the restart
-    session.qr = null;
-    setTimeout(() => startSocket(session), 3000);
+    // Any other drop. Before the code is entered, a new code is needed. While linking, reconnect as is.
+    const linking = session.status === 'linking';
+    session.status = linking ? 'linking' : 'starting';
+    if (!linking) {
+      session.code = null;
+      session.qr = null;
+    }
+    return restartSocket(session, !linking && session.type === 'code');
   }
 }
 
@@ -185,6 +210,7 @@ async function requestCode(session, sock, state) {
       session.code = await sock.requestPairingCode(session.phone);
       session.status = 'waiting';
       session.error = null;
+      console.log(`[${session.id}] pairing code issued`);
       return;
     } catch (err) {
       lastError = err.message;
@@ -197,6 +223,7 @@ async function requestCode(session, sock, state) {
   }
 }
 
+// Called only when the reconnected socket opens, which means registration is complete.
 async function finishLink(session, sock) {
   if (session.finishing) return;
   session.finishing = true;
@@ -214,14 +241,12 @@ async function finishLink(session, sock) {
   session.status = 'linked';
   session.code = null;
   session.qr = null;
+  console.log(`[${session.id}] linked`);
 
   try {
-    // Write all pending keys to disk, then close this pairing connection.
     await session.saveCreds?.();
     try { sock.end(undefined); } catch {}
-
-    // Give WhatsApp's pairing socket time to close fully before the files move.
-    await sleep(3000);
+    await sleep(1500); // let the socket close and the files settle
 
     // Stop every other pairing before the bot starts, so only one device registers.
     for (const other of sessions.values()) {
@@ -253,7 +278,7 @@ function fail(session, message) {
 function cleanup() {
   const now = Date.now();
   for (const s of sessions.values()) {
-    if (ACTIVE.has(s.status) && now > s.expiresAt) {
+    if (ACTIVE.has(s.status) && s.status !== 'linking' && now > s.expiresAt) {
       stop(s, 'expired', 'This code or QR expired. Generate a new one.');
     }
     if (FINAL.has(s.status) && now > s.expiresAt + KEEP_FINISHED_MS) {
