@@ -1,8 +1,8 @@
 // src/pairing/pair-manager.js
 // Each pairing request gets its own temporary WhatsApp connection and auth folder.
 // Linking completes when WhatsApp sends a restart (515) or the socket opens.
-// The credentials are flushed to disk, then copied into the bot's session.
-// The first pairing that links becomes the bot's account; the others are cancelled.
+// The first pairing that links becomes the bot's account; the others are cancelled
+// before the bot starts, so only one device registers.
 
 const fs = require('fs');
 const path = require('path');
@@ -12,7 +12,7 @@ const QRCode = require('qrcode');
 const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 
 const PAIR_DIR = path.join(process.cwd(), 'pair_sessions');
-const SESSION_TTL_MS = 5 * 60 * 1000;   // how long a code or QR stays usable
+const SESSION_TTL_MS = 5 * 60 * 1000;    // how long a code or QR stays usable
 const KEEP_FINISHED_MS = 10 * 60 * 1000; // how long finished entries stay visible
 const MAX_RESTARTS = 5;
 
@@ -53,7 +53,12 @@ function activeCount() {
 }
 
 async function createSession({ type, phone = null }) {
-  if (deps.isBotPaired()) throw httpError(409, 'This bot is already paired.');
+  if (deps.isBotPaired()) {
+    throw httpError(
+      409,
+      'The bot is already connected to WhatsApp. Pairing is turned off until SESSION_ID is removed and the bot restarts.'
+    );
+  }
 
   const id = crypto.randomBytes(8).toString('hex');
   const session = {
@@ -195,25 +200,36 @@ async function requestCode(session, sock, state) {
 async function finishLink(session, sock) {
   if (session.finishing) return;
   session.finishing = true;
+
+  // Only the first pairing may become the bot's account.
+  if (deps.isBotPaired()) {
+    try { sock.end(undefined); } catch {}
+    return stop(
+      session,
+      'failed',
+      'The bot is already linked. Remove SESSION_ID and restart the bot to pair a different number.'
+    );
+  }
+
   session.status = 'linked';
   session.code = null;
   session.qr = null;
 
   try {
-    // Write every pending key and credential to disk before copying anything.
+    // Write all pending keys to disk, then close this pairing connection.
     await session.saveCreds?.();
-    await sleep(1000);
-
-    // Close this pairing connection so only the bot's own connection uses the credentials.
     try { sock.end(undefined); } catch {}
-    await sleep(2000);
 
-    await deps.onLinked(session.dir);
-    removeDir(session.dir);
+    // Give WhatsApp's pairing socket time to close fully before the files move.
+    await sleep(3000);
 
+    // Stop every other pairing before the bot starts, so only one device registers.
     for (const other of sessions.values()) {
       if (other.id !== session.id && ACTIVE.has(other.status)) stop(other, 'cancelled');
     }
+
+    // deps.onLinked moves this folder into auth_info and starts the bot.
+    await deps.onLinked(session.dir);
   } catch (err) {
     console.error('Linking failed:', err.message);
     session.status = 'failed';
