@@ -29,6 +29,7 @@ const PAIR_PAGE = fs.readFileSync(path.join(__dirname, 'pairing', 'pair-page.htm
 let mainSock = null;   // the bot's live WhatsApp connection (null until paired)
 let mainGen = 0;       // increments on every (re)start; old connections are ignored
 let botPaired = false;
+let connected = false; // true only while the WhatsApp connection is open
 let version;           // Baileys protocol version, fetched once at boot
 let announced = false; // "Online" message is sent only once per process
 
@@ -87,6 +88,7 @@ function endMainSocket() {
 
 function clearSession(message) {
   botPaired = false;
+  connected = false;
   endMainSocket();
   fs.rmSync(AUTH_DIR, { recursive: true, force: true });
   console.log(message);
@@ -130,6 +132,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && url === '/api/status') {
     return sendJson(res, 200, {
       paired: botPaired,
+      connected,
       active: pairing.activeCount(),
     });
   }
@@ -177,6 +180,7 @@ setInterval(() => {
 async function startBot() {
   const gen = ++mainGen;
   endMainSocket();
+  connected = false;
 
   botPaired = isPairedOnDisk();
   if (!botPaired) {
@@ -209,6 +213,7 @@ async function startBot() {
     if (gen !== mainGen) return;
 
     if (connection === 'open') {
+      connected = true;
       console.log(`${BOT_NAME} connected! Send !help to test.`);
       saveSession();
       if (!announced) {
@@ -221,6 +226,7 @@ async function startBot() {
     }
 
     if (connection === 'close') {
+      connected = false;
       const code = lastDisconnect?.error?.output?.statusCode;
       console.log(`Connection closed (code ${code}).`);
 
