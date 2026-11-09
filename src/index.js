@@ -1,16 +1,15 @@
 require('dotenv').config();
 const http = require('http');
 const fs = require('fs');
+const path = require('path');
 const {
   makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
   isJidBroadcast,
-  Browsers,
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
-const qrcode = require('qrcode-terminal');
 const cron = require('node-cron');
 const { handleMessage } = require('./handlers/messageHandler');
 const { loadReminders, checkReminders } = require('./handlers/reminderHandler');
@@ -18,55 +17,22 @@ const { handleStatus } = require('./handlers/statusHandler');
 const { handleStatusSave } = require('./handlers/statusSaveHandler');
 const { cacheMessage, handleDelete } = require('./handlers/antideleteHandler');
 const { restoreSession, saveSession } = require('./session-manager');
+const pairing = require('./pairing/pair-manager');
 
-const AUTH_DIR = './auth_info';
+const AUTH_DIR = path.join(process.cwd(), 'auth_info');
 const PORT = process.env.PORT || 3000;
 const BOT_NAME = 'ADEZ NEXUS';
 const OWNER_NAME = process.env.OWNER_NAME || 'Arnold Adez';
 const OWNER_CONTACT = process.env.OWNER_CONTACT || '';
+const PAIR_PAGE = fs.readFileSync(path.join(__dirname, 'pairing', 'pair-page.html'), 'utf8');
 
-const PAIRING_PAGE = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${BOT_NAME} Pairing</title>
-  <style>
-    body{font:16px system-ui,sans-serif;background:#101827;color:#f4f7fb;display:grid;place-items:center;min-height:100vh;margin:0;padding:20px;box-sizing:border-box}
-    main{max-width:440px;width:100%;background:#1b2738;padding:28px;border-radius:16px;box-sizing:border-box}
-    h1{margin-top:0;color:#7ce0bd}label{display:block;margin:16px 0 6px}input,button{box-sizing:border-box;width:100%;padding:12px;border-radius:8px;border:1px solid #526177;font:inherit}
-    input{background:#101827;color:#fff}button{margin-top:18px;background:#25b989;color:#07130f;border:0;font-weight:700;cursor:pointer}button:disabled{opacity:.6;cursor:wait}
-    #result{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:18px}.hint{color:#bdc8d8;font-size:.9rem}
-  </style>
-</head>
-<body><main>
-  <h1>${BOT_NAME}</h1>
-  <p>Generate a WhatsApp pairing code for your own WhatsApp number.</p>
-  <form id="pair-form">
-    <label for="phone">Your WhatsApp number (international format, digits only)</label>
-    <input id="phone" name="phone" inputmode="numeric" autocomplete="tel" placeholder="254..." required pattern="[0-9]{8,15}">
-    <button id="submit" type="submit">Generate pairing code</button>
-  </form>
-  <p class="hint">Enter the code in WhatsApp: Settings → Linked devices → Link a device → Link with phone number instead. Only pair a number you own. The code expires quickly.</p>
-  <div id="result" role="status" aria-live="polite"></div>
-</main>
-<script>
-  const form=document.querySelector('#pair-form'), button=document.querySelector('#submit'), result=document.querySelector('#result');
-  form.addEventListener('submit',async event=>{
-    event.preventDefault(); button.disabled=true; result.textContent='Requesting a pairing code…';
-    try{
-      const response=await fetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:form.phone.value})});
-      const data=await response.json(); result.textContent=response.ok?'Pairing code: '+data.code:(data.error||'Unable to create pairing code.');
-    }catch{result.textContent='Request failed. Please try again later.'}
-    finally{button.disabled=false}
-  });
-</script></body></html>`;
+let mainSock = null;   // the bot's live WhatsApp connection (null until paired)
+let mainGen = 0;       // increments on every (re)start; old connections are ignored
+let botPaired = false;
+let version;           // Baileys protocol version, fetched once at boot
+let announced = false; // "Online" message is sent only once per process
 
-let pairingSocket = null;
-let pairingReady = false; // true only once WhatsApp's handshake is done (qr emitted or connection open)
-let pairingRegistered = false;
-let lastPairingRequestAt = 0;
-const pairingAttempts = new Map();
+// ── helpers ───────────────────────────────────────────────────────
 
 function sendJson(res, status, body) {
   res.writeHead(status, {
@@ -78,83 +44,123 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+function readJson(req, res, handler) {
+  let raw = '';
+  let tooLarge = false;
+  req.on('data', chunk => {
+    if (tooLarge) return;
+    raw += chunk;
+    if (raw.length > 2048) {
+      tooLarge = true;
+      sendJson(res, 413, { error: 'Request too large.' });
+    }
+  });
+  req.on('end', () => {
+    if (tooLarge) return;
+    let body;
+    try { body = JSON.parse(raw || '{}'); } catch { return sendJson(res, 400, { error: 'Invalid request.' }); }
+    handler(body).catch(err => {
+      if (err.status) return sendJson(res, err.status, { error: err.message });
+      console.error('Request error:', err);
+      sendJson(res, 500, { error: 'Something went wrong. Try again.' });
+    });
+  });
+}
+
+function clientIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  return (forwarded ? String(forwarded).split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
+}
+
+function isPairedOnDisk() {
+  try {
+    const creds = JSON.parse(fs.readFileSync(path.join(AUTH_DIR, 'creds.json'), 'utf8'));
+    return Boolean(creds.registered);
+  } catch {
+    return false;
+  }
+}
+
+function endMainSocket() {
+  if (mainSock) {
+    try { mainSock.end(undefined); } catch {}
+    mainSock = null;
+  }
+}
+
+async function sendOnlineMessage(sock) {
+  try {
+    const myJid = sock.user.id.replace(/:\d+/, '') + '@s.whatsapp.net';
+    const contactLine = OWNER_CONTACT ? `\nContact: ${OWNER_CONTACT}` : '';
+    await sock.sendMessage(myJid, {
+      text: `*${BOT_NAME} Online*\n\nOwner: ${OWNER_NAME}${contactLine}\n\nBot is online and ready!\n\n_Type !help to see all commands_`,
+    });
+  } catch (e) {
+    console.error('Failed to send connect message:', e.message);
+  }
+}
+
+// ── HTTP server (pairing page + API) ──────────────────────────────
+
 const server = http.createServer((req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Cache-Control', 'no-store');
 
-  if (req.method === 'GET' && req.url === '/health') {
+  const url = req.url.split('?')[0];
+
+  if (req.method === 'GET' && url === '/health') {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
     return res.end(`${BOT_NAME} is running`);
   }
 
-  if (req.method === 'GET' && req.url === '/') {
+  if (req.method === 'GET' && url === '/') {
     res.writeHead(200, {
       'Content-Type': 'text/html; charset=utf-8',
-      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
     });
-    return res.end(PAIRING_PAGE);
+    return res.end(PAIR_PAGE);
   }
 
-  if (req.method !== 'POST' || req.url !== '/api/pair') {
-    return sendJson(res, 404, { error: 'Not found.' });
+  if (req.method === 'GET' && url === '/api/status') {
+    return sendJson(res, 200, {
+      paired: botPaired,
+      active: pairing.activeCount(),
+      max: pairing.MAX_ACTIVE,
+    });
   }
 
-  // Pairing is open only until this deployment is linked to a WhatsApp account.
-  if (pairingRegistered) {
-    return sendJson(res, 409, { error: 'This bot is already paired. Clear SESSION_ID and restart to pair again.' });
+  if (req.method === 'POST' && (url === '/api/pair' || url === '/api/qr')) {
+    return readJson(req, res, async body => {
+      const type = url === '/api/pair' ? 'code' : 'qr';
+      let phone = null;
+      if (type === 'code') {
+        phone = String(body.phone || '').replace(/\D/g, '');
+        if (!/^\d{8,15}$/.test(phone)) {
+          return sendJson(res, 400, { error: 'Enter a valid phone number with country code, digits only.' });
+        }
+      }
+      const session = await pairing.createSession({ type, phone, ip: clientIp(req) });
+      return sendJson(res, 202, pairing.view(session));
+    });
   }
 
-  const ip = req.socket.remoteAddress || 'unknown';
-  const now = Date.now();
-  const attempts = pairingAttempts.get(ip) || { count: 0, resetAt: now + 10 * 60 * 1000 };
-  if (now > attempts.resetAt) {
-    attempts.count = 0;
-    attempts.resetAt = now + 10 * 60 * 1000;
+  const match = url.match(/^\/api\/sessions\/([a-f0-9]{16})$/);
+  if (match) {
+    if (req.method === 'GET') {
+      const session = pairing.getSession(match[1]);
+      if (!session) return sendJson(res, 404, { error: 'Session not found or expired.' });
+      return sendJson(res, 200, pairing.view(session));
+    }
+    if (req.method === 'DELETE') {
+      const session = pairing.cancelSession(match[1]);
+      if (!session) return sendJson(res, 404, { error: 'Session not found or expired.' });
+      return sendJson(res, 200, pairing.view(session));
+    }
   }
-  if (attempts.count >= 3) return sendJson(res, 429, { error: 'Too many requests. Try again later.' });
 
-  let rawBody = '';
-  let tooLarge = false;
-  req.on('data', chunk => {
-    if (tooLarge) return;
-    rawBody += chunk;
-    if (rawBody.length > 2048) {
-      tooLarge = true;
-      sendJson(res, 413, { error: 'Request too large.' });
-    }
-  });
-
-  req.on('end', async () => {
-    if (tooLarge) return;
-
-    let body;
-    try { body = JSON.parse(rawBody); } catch { return sendJson(res, 400, { error: 'Invalid request.' }); }
-
-    const phone = String(body.phone || '').replace(/\D/g, '');
-    if (!/^\d{8,15}$/.test(phone)) {
-      return sendJson(res, 400, { error: 'Enter a valid phone number in international format.' });
-    }
-    if (!pairingSocket || !pairingReady) {
-      return sendJson(res, 503, { error: 'Bot is still connecting to WhatsApp. Wait a few seconds and try again.' });
-    }
-    if (now - lastPairingRequestAt < 60 * 1000) {
-      return sendJson(res, 429, { error: 'Please wait one minute before requesting another code.' });
-    }
-
-    attempts.count += 1;
-    pairingAttempts.set(ip, attempts);
-    lastPairingRequestAt = now;
-
-    try {
-      const code = await pairingSocket.requestPairingCode(phone);
-      return sendJson(res, 200, { code });
-    } catch (error) {
-      console.error('Pairing code request failed:', error.message);
-      return sendJson(res, 500, { error: 'Could not generate a pairing code. Check the number and try again later.' });
-    }
-  });
+  sendJson(res, 404, { error: 'Not found.' });
 });
 
 server.listen(PORT, () => console.log(`HTTP server listening on port ${PORT}`));
@@ -163,76 +169,68 @@ setInterval(() => {
   http.get(`http://localhost:${PORT}/health`, res => res.resume()).on('error', () => {});
 }, 5 * 60 * 1000);
 
+// ── WhatsApp bot connection ───────────────────────────────────────
+
 async function startBot() {
-  if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
+  const gen = ++mainGen;
+  endMainSocket();
+
+  botPaired = isPairedOnDisk();
+  if (!botPaired) {
+    console.log('ℹ️ Not paired yet. Open the pairing page to link a WhatsApp number.');
+    return;
+  }
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
-  const { version } = await fetchLatestBaileysVersion();
-  pairingRegistered = Boolean(state.creds.registered);
-
-  console.log(`Starting ${BOT_NAME} (Baileys v${version.join('.')})`);
+  console.log(`Starting ${BOT_NAME}${version ? ` (Baileys v${version.join('.')})` : ''}`);
 
   const sock = makeWASocket({
-    version,
+    ...(version ? { version } : {}),
     auth: state,
     logger: pino({ level: 'silent' }),
-    browser: Browsers.macOS('Safari'), // -> ['Mac OS', 'Safari', '10.15.7']
+    browser: pairing.PAIR_BROWSER,
     getMessage: async () => ({ conversation: '' }),
     shouldIgnoreJid: jid => isJidBroadcast(jid),
     connectTimeoutMs: 60000,
     keepAliveIntervalMs: 10000,
     retryRequestDelayMs: 250,
   });
-
-  pairingSocket = sock;
-  pairingReady = false;
+  mainSock = sock;
 
   sock.ev.on('creds.update', async () => {
-    pairingRegistered = Boolean(state.creds.registered);
     await saveCreds();
     saveSession();
   });
 
-  sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
-    if (qr) {
-      pairingReady = true;
-      console.log(`\nScan this QR code with WhatsApp for ${BOT_NAME}:\n`);
-      qrcode.generate(qr, { small: true });
-    }
-
-    if (connection === 'open') pairingReady = true;
-
-    if (connection === 'close') {
-      pairingReady = false;
-      pairingSocket = null;
-
-      const code = lastDisconnect?.error?.output?.statusCode;
-      const shouldReconnect = code !== DisconnectReason.loggedOut;
-      console.log(`Connection closed (code ${code}). Reconnecting: ${shouldReconnect}`);
-
-      if (shouldReconnect) {
-        const delay = code === 500 ? 120000 : 5000;
-        console.log(`Waiting ${delay / 1000}s before reconnecting...`);
-        setTimeout(startBot, delay);
-      } else {
-        pairingRegistered = false;
-        console.log('Logged out. Clear SESSION_ID and restart.');
-      }
-    }
+  sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
+    if (gen !== mainGen) return;
 
     if (connection === 'open') {
-      pairingRegistered = true;
       console.log(`${BOT_NAME} connected! Send !help to test.`);
       saveSession();
-      try {
-        const myJid = sock.user.id.replace(/:\d+/, '') + '@s.whatsapp.net';
-        const contactLine = OWNER_CONTACT ? `\nContact: ${OWNER_CONTACT}` : '';
-        await sock.sendMessage(myJid, {
-          text: `*${BOT_NAME} Online*\n\nOwner: ${OWNER_NAME}${contactLine}\n\nBot is online and ready!\n\n_Type !help to see all commands_`,
-        });
-      } catch (e) {
-        console.error('Failed to send connect message:', e.message);
+      if (!announced) {
+        announced = true;
+        sendOnlineMessage(sock);
       }
+    }
+
+    if (connection === 'close') {
+      const code = lastDisconnect?.error?.output?.statusCode;
+      console.log(`Connection closed (code ${code}).`);
+
+      if (code === DisconnectReason.loggedOut) {
+        botPaired = false;
+        mainSock = null;
+        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        console.log('Logged out from WhatsApp. The session was cleared. Open the pairing page to link again.');
+        return;
+      }
+
+      const delay = code === 500 ? 120000 : 5000;
+      console.log(`Reconnecting in ${delay / 1000}s...`);
+      setTimeout(() => {
+        if (gen === mainGen) startBot().catch(err => console.error('Restart failed:', err.message));
+      }, delay);
     }
   });
 
@@ -317,11 +315,45 @@ async function startBot() {
       }
     } catch (e) {}
   });
-
-  loadReminders();
-  cron.schedule('* * * * *', () => checkReminders(sock));
 }
 
-// Restore the saved session once at startup, never on reconnect.
+// ── startup ───────────────────────────────────────────────────────
+
+// Scheduled reminders run once per process and use whichever connection is live.
+loadReminders();
+cron.schedule('* * * * *', () => {
+  if (mainSock && botPaired) {
+    checkReminders(mainSock).catch(err => console.error('Reminder error:', err.message));
+  }
+});
+
+pairing.init({
+  getVersion: () => version,
+  isBotPaired: () => botPaired,
+  onLinked: async pairDir => {
+    fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+    fs.cpSync(pairDir, AUTH_DIR, { recursive: true });
+    console.log('✅ Linked successfully. Starting the bot...');
+    console.log('To keep this session after restarts, set SESSION_ID. In a shell run: tar -czf - auth_info | base64 -w 0');
+    await startBot();
+  },
+});
+
+async function boot() {
+  try {
+    if (!version) {
+      try {
+        ({ version } = await fetchLatestBaileysVersion());
+      } catch (e) {
+        console.warn('Could not fetch the latest Baileys version, using the default:', e.message);
+      }
+    }
+    await startBot();
+  } catch (err) {
+    console.error('Startup failed, retrying in 30s:', err.message);
+    setTimeout(boot, 30000);
+  }
+}
+
 restoreSession();
-startBot().catch(console.error);
+boot();
