@@ -3,20 +3,21 @@ const http = require('http');
 const { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, isJidBroadcast } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
-const { handleMessage }              = require('./handlers/messageHandler');
+const { handleMessage } = require('./handlers/messageHandler');
 const { loadReminders, checkReminders } = require('./handlers/reminderHandler');
-const { handleStatus }               = require('./handlers/statusHandler');
-const { handleStatusSave }           = require('./handlers/statusSaveHandler');
+const { handleStatus } = require('./handlers/statusHandler');
+const { handleStatusSave } = require('./handlers/statusSaveHandler');
 const { cacheMessage, handleDelete } = require('./handlers/antideleteHandler');
 const { restoreSession, saveSession } = require('./session-manager');
 const cron = require('node-cron');
-const fs   = require('fs');
+const fs = require('fs');
 
 const AUTH_DIR = './auth_info';
 const PORT = process.env.PORT || 3000;
 const BOT_NAME = 'ADEZ NEXUS';
+const OWNER_NAME = 'Arnold Adez';
+const OWNER_CONTACT = '+254111783552';
 
-// Must be before everything — prevents Baileys socket errors from crashing the process
 process.on('uncaughtException', (err) => {
   if (err?.message === 'Connection Closed' || err?.output?.statusCode === 428) {
     console.warn('Ignored Baileys uncaught exception');
@@ -48,14 +49,14 @@ async function startBot() {
   if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
-  const { version }          = await fetchLatestBaileysVersion();
+  const { version } = await fetchLatestBaileysVersion();
 
   console.log(`Starting ${BOT_NAME} (Baileys v${version.join('.')})`);
 
   const sock = makeWASocket({
     version,
-    auth:    state,
-    logger:  pino({ level: 'silent' }),
+    auth: state,
+    logger: pino({ level: 'silent' }),
     browser: ['Ubuntu', 'Chrome', '20.0.04'],
     getMessage: async () => ({ conversation: '' }),
     shouldIgnoreJid: jid => isJidBroadcast(jid),
@@ -64,7 +65,6 @@ async function startBot() {
     retryRequestDelayMs: 250,
   });
 
-  // Save creds AND persist session to file after every update
   sock.ev.on('creds.update', async () => {
     await saveCreds();
     saveSession();
@@ -89,12 +89,11 @@ async function startBot() {
     }
     if (connection === 'open') {
       console.log(`${BOT_NAME} connected! Send !help to test.`);
-      // Save session immediately on successful connection
       saveSession();
       try {
         const myJid = sock.user.id.replace(/:\d+/, '') + '@s.whatsapp.net';
         await sock.sendMessage(myJid, {
-          text: `*Connected by ${BOT_NAME}*\n\nBot is online and ready!\n\n_Type !help to see all commands_`
+          text: `*${BOT_NAME} Online*\n\nOwner: ${OWNER_NAME}\nContact: ${OWNER_CONTACT}\n\nBot is online and ready!\n\n_Type !help to see all commands_`
         });
       } catch (e) {
         console.error('Failed to send connect message:', e.message);
