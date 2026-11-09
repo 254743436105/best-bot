@@ -14,6 +14,7 @@ const fs   = require('fs');
 
 const AUTH_DIR = './auth_info';
 const PORT = process.env.PORT || 3000;
+const BOT_NAME = 'ADEZ NEXUS';
 
 // Must be before everything — prevents Baileys socket errors from crashing the process
 process.on('uncaughtException', (err) => {
@@ -34,7 +35,7 @@ process.on('unhandledRejection', (err) => {
 
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('WhatsApp Bot is running');
+  res.end(`${BOT_NAME} is running`);
 });
 server.listen(PORT, () => console.log(`HTTP server listening on port ${PORT}`));
 
@@ -49,7 +50,7 @@ async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version }          = await fetchLatestBaileysVersion();
 
-  console.log(`Starting WhatsApp Bot (Baileys v${version.join('.')})`);
+  console.log(`Starting ${BOT_NAME} (Baileys v${version.join('.')})`);
 
   const sock = makeWASocket({
     version,
@@ -71,7 +72,7 @@ async function startBot() {
 
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
-      console.log('\nScan this QR code with WhatsApp:\n');
+      console.log(`\nScan this QR code with WhatsApp for ${BOT_NAME}:\n`);
       qrcode.generate(qr, { small: true });
     }
     if (connection === 'close') {
@@ -87,13 +88,13 @@ async function startBot() {
       }
     }
     if (connection === 'open') {
-      console.log('Bot connected! Send !help to test.');
+      console.log(`${BOT_NAME} connected! Send !help to test.`);
       // Save session immediately on successful connection
       saveSession();
       try {
         const myJid = sock.user.id.replace(/:\d+/, '') + '@s.whatsapp.net';
         await sock.sendMessage(myJid, {
-          text: `*Connected by Mungai Yobih*\n\nBot is online and ready!\n\n_Type !help to see all commands_`
+          text: `*Connected by ${BOT_NAME}*\n\nBot is online and ready!\n\n_Type !help to see all commands_`
         });
       } catch (e) {
         console.error('Failed to send connect message:', e.message);
