@@ -4,9 +4,10 @@ const ROOT_DIR = process.cwd();
 const AUTH_DIR = path.join(ROOT_DIR, 'auth_info');
 
 function restoreSession() {
-  const data = process.env.SESSION_DATA;
+  // SESSION_ID is the current name; keep SESSION_DATA as a migration fallback.
+  const data = process.env.SESSION_ID || process.env.SESSION_DATA;
   if (!data || data.trim() === '') {
-    console.log('ℹ️ No SESSION_DATA found — scan the QR code.');
+    console.log('ℹ️ No SESSION_ID found — scan the QR code.');
     return;
   }
   try {
@@ -16,7 +17,7 @@ function restoreSession() {
     if (data.startsWith('XMDIA') || data.startsWith('XMD')) {
       const decoded = Buffer.from(data, 'base64');
       fs.writeFileSync(path.join(AUTH_DIR, 'creds.json'), decoded);
-      console.log('✅ Session restored from SESSION_DATA (XMDIA format).');
+      console.log('✅ Session restored from SESSION_ID (XMDIA format).');
       return;
     }
 
@@ -28,7 +29,7 @@ function restoreSession() {
           const buf = Buffer.from(parsed[filename], 'base64');
           fs.writeFileSync(path.join(AUTH_DIR, filename), buf);
         });
-        console.log('✅ Session restored from SESSION_DATA (multi-file).');
+        console.log('✅ Session restored from SESSION_ID (multi-file).');
         return;
       }
     } catch {}
@@ -38,7 +39,7 @@ function restoreSession() {
       const json = Buffer.from(data.replace(/\s/g, ''), 'base64').toString('utf8');
       JSON.parse(json);
       fs.writeFileSync(path.join(AUTH_DIR, 'creds.json'), json);
-      console.log('✅ Session restored from SESSION_DATA (base64).');
+      console.log('✅ Session restored from SESSION_ID (base64).');
       return;
     } catch {}
 
@@ -46,11 +47,11 @@ function restoreSession() {
     try {
       JSON.parse(data);
       fs.writeFileSync(path.join(AUTH_DIR, 'creds.json'), data);
-      console.log('✅ Session restored from SESSION_DATA (raw JSON).');
+      console.log('✅ Session restored from SESSION_ID (raw JSON).');
       return;
     } catch {}
 
-    console.error('⚠️ SESSION_DATA format not recognized.');
+    console.error('⚠️ SESSION_ID format not recognized.');
   } catch (err) {
     console.error('⚠️ Failed to restore session:', err.message);
   }
