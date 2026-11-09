@@ -1,12 +1,4 @@
-# 🤖 WhatsApp Personal Assistant Bot
-
-
-
-
-
-| **Heroku** | [![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://dashboard.heroku.com/new?button-url=https://github.com/254743436105/best-botMD&template=https://github.com/254743436105/best-bot) 
-
-
+# 🤖 ADEZ NEXUS
 
 ---
 
