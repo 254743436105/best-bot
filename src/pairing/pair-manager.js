@@ -1,7 +1,8 @@
 // src/pairing/pair-manager.js
 // Each pairing request gets its own temporary WhatsApp connection and auth folder.
-// Linking is complete when WhatsApp sends a restart (515) or the socket opens.
-// Then the credentials are copied into the bot's session and the other pairings are cancelled.
+// Linking completes when WhatsApp sends a restart (515) or the socket opens.
+// The credentials are flushed to disk, then copied into the bot's session.
+// The first pairing that links becomes the bot's account; the others are cancelled.
 
 const fs = require('fs');
 const path = require('path');
@@ -11,12 +12,11 @@ const QRCode = require('qrcode');
 const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 
 const PAIR_DIR = path.join(process.cwd(), 'pair_sessions');
-const SESSION_TTL_MS = 5 * 60 * 1000;
-const KEEP_FINISHED_MS = 10 * 60 * 1000;
+const SESSION_TTL_MS = 5 * 60 * 1000;   // how long a code or QR stays usable
+const KEEP_FINISHED_MS = 10 * 60 * 1000; // how long finished entries stay visible
 const MAX_RESTARTS = 5;
 
-// Default: "Mac OS|Safari|10.15.7". To try another browser, set PAIR_BROWSER,
-// for example "Ubuntu|Chrome|20.0.04".
+// Default browser identity. Override with PAIR_BROWSER, e.g. "Ubuntu|Chrome|20.0.04".
 const PAIR_BROWSER = (process.env.PAIR_BROWSER || 'Mac OS|Safari|10.15.7')
   .split('|')
   .map(part => part.trim());
@@ -41,7 +41,7 @@ function removeDir(dir) {
 
 function init(options) {
   deps = options;
-  removeDir(PAIR_DIR); // clear leftovers from an earlier run
+  removeDir(PAIR_DIR);
   fs.mkdirSync(PAIR_DIR, { recursive: true });
   setInterval(cleanup, 30 * 1000).unref();
 }
@@ -67,6 +67,7 @@ async function createSession({ type, phone = null }) {
     expiresAt: Date.now() + SESSION_TTL_MS,
     dir: path.join(PAIR_DIR, id),
     sock: null,
+    saveCreds: null,
     restarts: 0,
     finishing: false,
   };
@@ -103,6 +104,7 @@ async function startSocket(session) {
   if (FINAL.has(session.status)) return;
   try {
     const { state, saveCreds } = await useMultiFileAuthState(session.dir);
+    session.saveCreds = saveCreds;
     const version = deps.getVersion();
 
     const sock = makeWASocket({
@@ -162,7 +164,7 @@ async function onUpdate(session, sock, { connection, lastDisconnect, qr }) {
     session.restarts += 1;
     session.sock = null;
     session.status = 'starting';
-    session.code = null; // a fresh code is requested on restart
+    session.code = null; // a fresh code is requested after the restart
     session.qr = null;
     setTimeout(() => startSocket(session), 3000);
   }
@@ -198,11 +200,13 @@ async function finishLink(session, sock) {
   session.qr = null;
 
   try {
-    await sleep(1500); // let WhatsApp's final key writes reach disk
+    // Write every pending key and credential to disk before copying anything.
+    await session.saveCreds?.();
+    await sleep(1000);
 
     // Close this pairing connection so only the bot's own connection uses the credentials.
     try { sock.end(undefined); } catch {}
-    await sleep(500);
+    await sleep(2000);
 
     await deps.onLinked(session.dir);
     removeDir(session.dir);
