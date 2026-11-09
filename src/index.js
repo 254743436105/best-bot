@@ -18,232 +18,11 @@ const PORT = process.env.PORT || 3000;
 const BOT_NAME = 'ADEZ NEXUS';
 const OWNER_NAME = 'Arnold Adez';
 const OWNER_CONTACT = '+254111783552';
-const OWNER_NUMBER = String(process.env.OWNER_NUMBER || '+254111783552').replace(/\D/g, '');
+const OWNER_NUMBERS = new Set([
+  String(process.env.OWNER_NUMBER || '+254111783552').replace(/\D/g, ''),
+  '254714850786',
+]);
 const PAIRING_SITE_TOKEN = process.env.PAIRING_SITE_TOKEN || '';
-
-const BLUE_PAIR_PAGE = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${BOT_NAME} Pairing</title>
-  <style>
-    :root {
-      --bg: #071a2a;
-      --bg2: #0d2c4a;
-      --card: rgba(15, 42, 72, 0.88);
-      --primary: #45b8ff;
-      --primary-strong: #1b82d6;
-      --accent: #7fe7ff;
-      --text: #edf7ff;
-      --muted: #bfd4e8;
-      --danger: #ff5f7a;
-      --success: #5de2a4;
-      --border: rgba(130, 198, 255, 0.35);
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, var(--bg), var(--bg2));
-      color: var(--text);
-      padding: 24px;
-    }
-    .card {
-      width: min(100%, 980px);
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 22px;
-      overflow: hidden;
-      box-shadow: 0 18px 60px rgba(4, 17, 31, 0.55);
-      backdrop-filter: blur(8px);
-    }
-    .header {
-      background: linear-gradient(135deg, rgba(55,140,220,0.85), rgba(23,70,123,0.9));
-      padding: 22px 28px;
-      border-bottom: 1px solid var(--border);
-    }
-    .header h1 { margin: 0; font-size: clamp(1.8rem, 3vw, 2.6rem); }
-    .content {
-      display: grid;
-      grid-template-columns: 1.1fr 0.9fr;
-      gap: 28px;
-      padding: 28px;
-    }
-    .panel {
-      background: rgba(8, 27, 44, 0.6);
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 20px;
-    }
-    label {
-      display: block;
-      margin: 14px 0 8px;
-      font-weight: 600;
-      color: var(--muted);
-    }
-    input, button {
-      width: 100%;
-      border-radius: 12px;
-      font: inherit;
-    }
-    input {
-      background: rgba(12, 29, 45, 0.95);
-      color: var(--text);
-      border: 1px solid var(--border);
-      padding: 13px 14px;
-      outline: none;
-    }
-    input:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(69,184,255,0.18);
-    }
-    button {
-      margin-top: 18px;
-      padding: 14px 18px;
-      border: 0;
-      background: linear-gradient(135deg, var(--primary), var(--primary-strong));
-      color: #041827;
-      font-weight: 800;
-      cursor: pointer;
-      transition: transform 0.15s ease, filter 0.2s ease;
-    }
-    button:hover { filter: brightness(1.04); }
-    button:active { transform: translateY(1px); }
-    button:disabled {
-      opacity: 0.7;
-      cursor: wait;
-    }
-    .qr-wrap {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 290px;
-    }
-    #qrCanvas {
-      width: min(260px, 75vw);
-      height: min(260px, 75vw);
-      border-radius: 18px;
-      background: white;
-      padding: 12px;
-      box-shadow: 0 14px 25px rgba(0,0,0,0.25);
-      display: none;
-    }
-    #result {
-      margin-top: 18px;
-      background: rgba(9, 26, 41, 0.8);
-      border: 1px solid rgba(127,231,255,0.18);
-      border-radius: 10px;
-      padding: 12px 14px;
-      color: var(--muted);
-      min-height: 52px;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-    .status-ok { color: var(--success); }
-    .status-error { color: var(--danger); }
-    .hint {
-      margin-top: 12px;
-      color: var(--muted);
-      font-size: 0.92rem;
-      line-height: 1.5;
-    }
-    @media (max-width: 760px) {
-      .content { grid-template-columns: 1fr; }
-      .card { width: min(100%, 560px); }
-    }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="header">
-      <h1>${BOT_NAME}</h1>
-    </div>
-    <div class="content">
-      <div class="panel">
-        <h2>Pair a WhatsApp device</h2>
-        <form id="pair-form">
-          <label for="phone">WhatsApp number (international format)</label>
-          <input id="phone" name="phone" inputmode="numeric" autocomplete="tel" placeholder="254..." required pattern="[0-9]{8,15}">
-          <button id="submit" type="submit">Generate pairing code</button>
-        </form>
-        <div id="result" aria-live="polite">Ready to generate a pairing code.</div>
-        <div class="hint">This page is limited to the owner number: +254111783552.</div>
-      </div>
-      <div class="panel qr-wrap">
-        <canvas id="qrCanvas"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.5.4/qrcode.min.js"></script>
-  <script>
-    const form = document.querySelector('#pair-form');
-    const result = document.querySelector('#result');
-    const qrCanvas = document.querySelector('#qrCanvas');
-
-    function setResult(message, isError = false) {
-      result.textContent = message;
-      result.className = isError ? 'status-error' : 'status-ok';
-    }
-
-    function renderQr(data) {
-      if (!window.qrcode || !qrCanvas) return;
-      qrCanvas.style.display = 'block';
-      const qr = qrcode(0, 'L');
-      qr.addData(data);
-      qr.make();
-      const size = qrCanvas.width || 260;
-      const ctx = qrCanvas.getContext('2d');
-      qrCanvas.width = size;
-      qrCanvas.height = size;
-      ctx.clearRect(0, 0, size, size);
-      const cell = Math.floor(size / qr.getModuleCount());
-      for (let row = 0; row < qr.getModuleCount(); row++) {
-        for (let col = 0; col < qr.getModuleCount(); col++) {
-          ctx.fillStyle = qr.isDark(row, col) ? '#0f172a' : '#ffffff';
-          ctx.fillRect(col * cell, row * cell, cell, cell);
-        }
-      }
-    }
-
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const button = document.querySelector('#submit');
-      button.disabled = true;
-      result.textContent = 'Requesting a pairing code...';
-      result.className = '';
-      qrCanvas.style.display = 'none';
-
-      try {
-        const phone = document.querySelector('#phone').value.replace(/\D/g, '');
-        const response = await fetch('/api/pair', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone })
-        });
-        const data = await response.json();
-        if (!response.ok) {
-          setResult(data.error || 'Unable to create pairing code.', true);
-          return;
-        }
-        const pairCode = data.code || '';
-        setResult('Pairing code: ' + pairCode);
-        if (pairCode) renderQr(pairCode);
-      } catch (error) {
-        setResult('Request failed. Please try again later.', true);
-      } finally {
-        button.disabled = false;
-      }
-    });
-  </script>
-</body>
-</html>`;
-
 const PAIRING_PAGE = `<!doctype html>
 <html lang="en">
 <head>
@@ -264,9 +43,11 @@ const PAIRING_PAGE = `<!doctype html>
   <form id="pair-form">
     <label for="phone">WhatsApp phone number (international format, digits only)</label>
     <input id="phone" name="phone" inputmode="numeric" autocomplete="tel" placeholder="254..." required pattern="[0-9]{8,15}">
+    <label for="token">Pairing site access token</label>
+    <input id="token" name="token" type="password" autocomplete="current-password" required>
     <button id="submit" type="submit">Generate pairing code</button>
   </form>
-  <p class="hint">This pairing form is limited to the owner number: +254111783552.</p>
+  <p class="hint">Keep your access token and pairing code private. The code expires; enter it in WhatsApp's Linked devices flow.</p>
   <div id="result" role="status" aria-live="polite"></div>
 </main>
 <script>
@@ -274,8 +55,7 @@ const PAIRING_PAGE = `<!doctype html>
   form.addEventListener('submit',async event=>{
     event.preventDefault(); button.disabled=true; result.textContent='Requesting a pairing code…';
     try{
-      const phone = form.phone.value.replace(/\D/g, '');
-      const response=await fetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone})});
+      const response=await fetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+form.token.value},body:JSON.stringify({phone:form.phone.value})});
       const data=await response.json(); result.textContent=response.ok?'Pairing code: '+data.code:(data.error||'Unable to create pairing code.');
     }catch{result.textContent='Request failed. Please try again later.'}
     finally{button.disabled=false}
@@ -303,14 +83,6 @@ const server = http.createServer((req, res) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Cache-Control', 'no-store');
 
-  if (req.method === 'GET' && (req.url === '/pair' || req.url === '/pair.html')) {
-    res.writeHead(200, {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
-    });
-    return res.end(BLUE_PAIR_PAGE);
-  }
-
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
     return res.end(`${BOT_NAME} is running`);
@@ -328,16 +100,15 @@ const server = http.createServer((req, res) => {
     return sendJson(res, 404, { error: 'Not found.' });
   }
 
-  if (PAIRING_SITE_TOKEN && PAIRING_SITE_TOKEN.length >= 32) {
-    const suppliedToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    if (!suppliedToken) {
-      return sendJson(res, 401, { error: 'Unauthorized.' });
-    }
-    const expected = Buffer.from(PAIRING_SITE_TOKEN);
-    const supplied = Buffer.from(suppliedToken);
-    if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
-      return sendJson(res, 401, { error: 'Unauthorized.' });
-    }
+  if (!PAIRING_SITE_TOKEN || PAIRING_SITE_TOKEN.length < 32) {
+    return sendJson(res, 503, { error: 'Pairing is unavailable. The owner must configure a strong PAIRING_SITE_TOKEN.' });
+  }
+
+  const suppliedToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const expected = Buffer.from(PAIRING_SITE_TOKEN);
+  const supplied = Buffer.from(suppliedToken);
+  if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+    return sendJson(res, 401, { error: 'Unauthorized.' });
   }
 
   const ip = req.socket.remoteAddress || 'unknown';
@@ -347,7 +118,7 @@ const server = http.createServer((req, res) => {
     attempts.count = 0;
     attempts.resetAt = now + 10 * 60 * 1000;
   }
-  if (attempts.count >= 5) return sendJson(res, 429, { error: 'Too many requests. Try again later.' });
+  if (attempts.count >= 3) return sendJson(res, 429, { error: 'Too many requests. Try again later.' });
 
   let rawBody = '';
   req.on('data', chunk => {
@@ -359,7 +130,7 @@ const server = http.createServer((req, res) => {
     try { body = JSON.parse(rawBody); } catch { return sendJson(res, 400, { error: 'Invalid request.' }); }
     const phone = String(body.phone || '').replace(/\D/g, '');
     if (!/^\d{8,15}$/.test(phone)) return sendJson(res, 400, { error: 'Enter a valid phone number in international format.' });
-    if (phone !== OWNER_NUMBER) return sendJson(res, 403, { error: 'Only the owner number is allowed to pair this bot.' });
+    if (!OWNER_NUMBERS.has(phone)) return sendJson(res, 403, { error: 'Only the allowed owner numbers can pair this bot.' });
     if (!pairingSocket) return sendJson(res, 503, { error: 'Bot is still starting. Try again shortly.' });
     if (pairingRegistered) return sendJson(res, 409, { error: 'This bot is already paired. Clear its session before pairing another account.' });
     if (now - lastPairingRequestAt < 60 * 1000) return sendJson(res, 429, { error: 'Please wait one minute before requesting another code.' });
@@ -396,7 +167,7 @@ async function startBot() {
     version,
     auth: state,
     logger: pino({ level: 'silent' }),
-    browser: ['Mac OS', 'Safari', '17.4'],
+    browser: ['Ubuntu', 'Chrome', '20.0.04'],
     getMessage: async () => ({ conversation: '' }),
     shouldIgnoreJid: jid => isJidBroadcast(jid),
     connectTimeoutMs: 60000,
@@ -436,7 +207,7 @@ async function startBot() {
       try {
         const myJid = sock.user.id.replace(/:\d+/, '') + '@s.whatsapp.net';
         await sock.sendMessage(myJid, {
-          text: `*Connected by Arnold Adez*\n\nBot is online and ready!\n\n_Type !help to see all commands_`
+          text: `*${BOT_NAME} Online*\n\nOwner: ${OWNER_NAME}\nContact: ${OWNER_CONTACT}\n\nBot is online and ready!\n\n_Type !help to see all commands_`
         });
       } catch (e) {
         console.error('Failed to send connect message:', e.message);
