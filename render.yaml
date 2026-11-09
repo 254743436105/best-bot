@@ -11,7 +11,7 @@ services:
         value: Africa/Nairobi
       - key: SESSION_ID
         value: ""
-      - key: PAIRING_SITE_TOKEN
-        generateValue: true
+      - key: OWNER_NUMBER
+        value: "+254111783552"
       - key: NODE_ENV
         value: production
