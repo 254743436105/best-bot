@@ -1,6 +1,5 @@
 require('dotenv').config();
 const http = require('http');
-const crypto = require('crypto');
 const fs = require('fs');
 const {
   makeWASocket,
@@ -26,18 +25,6 @@ const BOT_NAME = 'ADEZ NEXUS';
 const OWNER_NAME = process.env.OWNER_NAME || 'Arnold Adez';
 const OWNER_CONTACT = process.env.OWNER_CONTACT || '';
 
-// Comma-separated list, digits only, e.g. OWNER_NUMBERS=254111783552,254714850786
-const OWNER_NUMBERS = new Set(
-  String(process.env.OWNER_NUMBERS || process.env.OWNER_NUMBER || '')
-    .split(',')
-    .map(n => n.replace(/\D/g, ''))
-    .filter(Boolean)
-);
-if (OWNER_NUMBERS.size === 0) {
-  console.warn('⚠️ No OWNER_NUMBERS set. Pairing will reject every number.');
-}
-
-const PAIRING_SITE_TOKEN = process.env.PAIRING_SITE_TOKEN || '';
 const PAIRING_PAGE = `<!doctype html>
 <html lang="en">
 <head>
@@ -54,15 +41,13 @@ const PAIRING_PAGE = `<!doctype html>
 </head>
 <body><main>
   <h1>${BOT_NAME}</h1>
-  <p>Generate a WhatsApp pairing code for the account you own or are authorized to link.</p>
+  <p>Generate a WhatsApp pairing code for your own WhatsApp number.</p>
   <form id="pair-form">
-    <label for="phone">WhatsApp phone number (international format, digits only)</label>
+    <label for="phone">Your WhatsApp number (international format, digits only)</label>
     <input id="phone" name="phone" inputmode="numeric" autocomplete="tel" placeholder="254..." required pattern="[0-9]{8,15}">
-    <label for="token">Pairing site access token</label>
-    <input id="token" name="token" type="password" autocomplete="current-password" required>
     <button id="submit" type="submit">Generate pairing code</button>
   </form>
-  <p class="hint">Keep your access token and pairing code private. The code expires; enter it in WhatsApp's Linked devices flow.</p>
+  <p class="hint">Enter the code in WhatsApp: Settings → Linked devices → Link a device → Link with phone number instead. Only pair a number you own. The code expires quickly.</p>
   <div id="result" role="status" aria-live="polite"></div>
 </main>
 <script>
@@ -70,7 +55,7 @@ const PAIRING_PAGE = `<!doctype html>
   form.addEventListener('submit',async event=>{
     event.preventDefault(); button.disabled=true; result.textContent='Requesting a pairing code…';
     try{
-      const response=await fetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+form.token.value},body:JSON.stringify({phone:form.phone.value})});
+      const response=await fetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:form.phone.value})});
       const data=await response.json(); result.textContent=response.ok?'Pairing code: '+data.code:(data.error||'Unable to create pairing code.');
     }catch{result.textContent='Request failed. Please try again later.'}
     finally{button.disabled=false}
@@ -116,15 +101,9 @@ const server = http.createServer((req, res) => {
     return sendJson(res, 404, { error: 'Not found.' });
   }
 
-  if (!PAIRING_SITE_TOKEN || PAIRING_SITE_TOKEN.length < 32) {
-    return sendJson(res, 503, { error: 'Pairing is unavailable. The owner must configure a strong PAIRING_SITE_TOKEN.' });
-  }
-
-  const suppliedToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  const expected = Buffer.from(PAIRING_SITE_TOKEN);
-  const supplied = Buffer.from(suppliedToken);
-  if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
-    return sendJson(res, 401, { error: 'Unauthorized.' });
+  // Pairing is open only until this deployment is linked to a WhatsApp account.
+  if (pairingRegistered) {
+    return sendJson(res, 409, { error: 'This bot is already paired. Clear SESSION_ID and restart to pair again.' });
   }
 
   const ip = req.socket.remoteAddress || 'unknown';
@@ -157,14 +136,8 @@ const server = http.createServer((req, res) => {
     if (!/^\d{8,15}$/.test(phone)) {
       return sendJson(res, 400, { error: 'Enter a valid phone number in international format.' });
     }
-    if (!OWNER_NUMBERS.has(phone)) {
-      return sendJson(res, 403, { error: 'Only the allowed owner numbers can pair this bot.' });
-    }
     if (!pairingSocket || !pairingReady) {
       return sendJson(res, 503, { error: 'Bot is still connecting to WhatsApp. Wait a few seconds and try again.' });
-    }
-    if (pairingRegistered) {
-      return sendJson(res, 409, { error: 'This bot is already paired. Clear its session before pairing another account.' });
     }
     if (now - lastPairingRequestAt < 60 * 1000) {
       return sendJson(res, 429, { error: 'Please wait one minute before requesting another code.' });
