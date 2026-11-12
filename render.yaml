@@ -9,7 +9,9 @@ services:
         value: "!"
       - key: TIMEZONE
         value: Africa/Nairobi
-      - key: SESSION_DATA
+      - key: SESSION_ID
         value: ""
+      - key: OWNER_NUMBER
+        value: "+254111783552"
       - key: NODE_ENV
         value: production

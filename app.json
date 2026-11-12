@@ -1,6 +1,6 @@
 {
-  "name": "WhatsApp Personal Assistant Bot",
-  "description": "A personal assistant WhatsApp bot with reminders, weather, music, auto-status view and more.",
+  "name": "ADEZ NEXUS WhatsApp Bot",
+  "description": "A personal assistant WhatsApp bot with reminders, weather, music, auto-status view and more. Open the app URL to pair your WhatsApp number.",
   "keywords": ["whatsapp", "bot", "assistant", "nodejs"],
   "env": {
     "PREFIX": {
@@ -9,22 +9,22 @@
       "required": false
     },
     "TIMEZONE": {
-      "description": "Your timezone e.g. Africa/Nairobi",
+      "description": "Your timezone, e.g. Africa/Nairobi",
       "value": "Africa/Nairobi",
       "required": false
     },
-    "PHONE_NUMBER": {
-      "description": "Enter your phone number without +sign.",
-      "value": "254100934193",
+    "OWNER_NAME": {
+      "description": "Your name, shown in the bot's connected message",
+      "value": "Arnold Adez",
       "required": false
     },
-    "HEROKU_APP_NAME": {
-      "description": "Your Heroku app name — enables auto session saving after reconnects.",
+    "OWNER_CONTACT": {
+      "description": "Your contact number, shown in the bot's connected message (optional)",
       "required": false
     },
-    "SESSION_DATA": {
-      "description": "your session provided by yobih mkuu.",
-      "require": true
+    "SESSION_ID": {
+      "description": "Filled in after your first pairing so the WhatsApp session survives restarts. Leave empty for the first deploy.",
+      "required": false
     }
   },
   "formation": {

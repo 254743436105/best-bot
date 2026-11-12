@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ADEZ NEXUS · Link WhatsApp</title>
+<style>
+  :root{
+    --bg1:#06142e; --bg2:#0d2a5e; --card:#102a57; --card2:#163470;
+    --line:#2a4f8f; --accent:#3b82f6; --accent-2:#60a5fa; --accent-dark:#1d4ed8;
+    --text:#eaf2ff; --muted:#9fb6e3; --ok:#34d399; --bad:#f87171; --warn:#fbbf24;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; padding:24px 16px 56px; color:var(--text);
+    font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:
+      radial-gradient(1000px 500px at 10% -10%, #1e4fa8 0%, transparent 60%),
+      linear-gradient(160deg, var(--bg1), var(--bg2));
+  }
+  [hidden]{display:none !important}
+  .wrap{max-width:720px;margin:0 auto}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.25rem;letter-spacing:.3px}
+  .logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
+        background:linear-gradient(135deg,var(--accent-2),var(--accent-dark));box-shadow:0 8px 24px rgba(59,130,246,.35)}
+  .logo svg{width:22px;height:22px;color:#fff}
+  .pill{padding:6px 12px;border-radius:999px;font-size:.85rem;color:var(--accent-2);
+        background:rgba(96,165,250,.12);border:1px solid var(--line)}
+  .pill.ok{color:var(--ok);border-color:rgba(52,211,153,.45);background:rgba(52,211,153,.1)}
+  .alert{display:flex;gap:12px;align-items:flex-start;padding:16px 18px;border-radius:14px;margin-bottom:18px;
+         border:1px solid rgba(52,211,153,.5);background:rgba(52,211,153,.12);color:var(--text)}
+  .alert.error{border-color:rgba(248,113,113,.55);background:rgba(248,113,113,.12)}
+  .alert-icon{flex:0 0 auto;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;
+              background:var(--ok);color:#06140e;font-weight:800}
+  .alert.error .alert-icon{background:var(--bad)}
+  .alert strong{display:block;margin-bottom:2px}
+  .alert p{margin:0;color:var(--muted);font-size:.92rem}
+  .panel{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);
+         border-radius:18px;padding:24px;box-shadow:0 20px 50px rgba(0,0,0,.35)}
+  h1{font-size:1.4rem;margin:0 0 6px}
+  .lead{color:var(--muted);margin:0 0 18px}
+  .tabs{display:flex;gap:8px;background:rgba(0,0,0,.22);padding:6px;border-radius:12px;margin-bottom:18px}
+  .tab{flex:1;border:0;background:transparent;color:var(--muted);padding:10px;border-radius:9px;font:inherit;font-weight:600;cursor:pointer}
+  .tab[aria-selected="true"]{background:var(--accent);color:#fff;box-shadow:0 6px 16px rgba(59,130,246,.35)}
+  label{display:block;font-size:.9rem;color:var(--muted);margin:0 0 6px}
+  input{width:100%;padding:13px 14px;border-radius:11px;border:1px solid var(--line);background:#071735;color:var(--text);font:inherit;outline:none}
+  input:focus{border-color:var(--accent-2);box-shadow:0 0 0 3px rgba(96,165,250,.25)}
+  .btn{margin-top:14px;width:100%;padding:13px;border:0;border-radius:11px;cursor:pointer;
+       background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;font:inherit;font-weight:700}
+  .btn:hover{filter:brightness(1.08)}
+  .btn:disabled{opacity:.55;cursor:not-allowed;filter:none}
+  .note{font-size:.88rem;color:var(--muted);margin:14px 0 0}
+  .warn{color:var(--warn)}
+  #cards{display:grid;gap:14px;margin-top:24px}
+  .empty{color:var(--muted);text-align:center;padding:18px 0;margin:18px 0 0}
+  .card{background:#0a1f47;border:1px solid var(--line);border-radius:16px;padding:18px}
+  .card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .card-title{font-weight:700}
+  .badge{font-size:.78rem;padding:4px 10px;border-radius:999px;background:rgba(96,165,250,.15);color:var(--accent-2)}
+  .badge.waiting{background:rgba(251,191,36,.12);color:var(--warn)}
+  .badge.linked{background:rgba(52,211,153,.14);color:var(--ok)}
+  .badge.failed,.badge.expired,.badge.cancelled{background:rgba(248,113,113,.12);color:var(--bad)}
+  .code-row{display:flex;align-items:center;justify-content:space-between;gap:12px;
+            background:#071735;border:1px dashed var(--accent-2);border-radius:12px;padding:14px 16px}
+  .code{font:700 1.5rem ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:3px;color:#fff;word-break:break-all}
+  .icon-btn{flex:0 0 auto;width:42px;height:42px;border-radius:10px;display:grid;place-items:center;cursor:pointer;
+            border:1px solid var(--line);background:var(--card2);color:var(--accent-2);transition:background .2s,color .2s}
+  .icon-btn:hover{background:var(--accent);color:#fff}
+  .icon-btn.done{background:var(--ok);border-color:var(--ok);color:#06140e}
+  .icon-btn svg{width:20px;height:20px}
+  .qr-wrap{display:block;width:fit-content;margin:6px auto 0;background:#fff;border-radius:14px;padding:14px}
+  .qr-wrap img{display:block;width:240px;height:240px;max-width:100%}
+  .hint{color:var(--muted);font-size:.9rem;margin:12px 0 0}
+  .card-foot{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:.85rem;color:var(--muted)}
+  .link{background:none;border:0;color:var(--bad);cursor:pointer;font:inherit;font-weight:600;padding:4px 0}
+  .toast{position:fixed;left:50%;bottom:22px;max-width:90vw;text-align:center;padding:12px 18px;border-radius:12px;
+         background:#0b2a63;border:1px solid var(--accent-2);color:var(--text);box-shadow:0 12px 30px rgba(0,0,0,.4);
+         transform:translate(-50%,140px);transition:transform .3s}
+  .toast.show{transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </div>
+      ADEZ NEXUS
+    </div>
+    <span id="botPill" class="pill">Checking…</span>
+  </header>
+
+  <div id="connectedAlert" class="alert" role="status" hidden>
+    <div class="alert-icon" aria-hidden="true">✓</div>
+    <div>
+      <strong>Bot is already connected to WhatsApp</strong>
+      <p>Pairing is turned off while the bot is connected. To link a different number, remove SESSION_ID in your host settings, restart the bot, then come back here.</p>
+    </div>
+  </div>
+
+  <div id="errorAlert" class="alert error" role="alert" hidden>
+    <div class="alert-icon" aria-hidden="true">!</div>
+    <div>
+      <strong id="errorTitle">Pairing not available</strong>
+      <p id="errorText"></p>
+    </div>
+  </div>
+
+  <section class="panel">
+    <h1>Link WhatsApp</h1>
+    <p class="lead">Create as many pairing codes or QR codes as you need. The first one that links becomes the bot's account.</p>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-code" aria-selected="true" aria-controls="panel-code" type="button">Pairing code</button>
+      <button class="tab" role="tab" id="tab-qr" aria-selected="false" aria-controls="panel-qr" type="button">QR code</button>
+    </div>
+
+    <form id="panel-code" role="tabpanel" aria-labelledby="tab-code" autocomplete="off">
+      <label for="phone">Your WhatsApp number (country code first)</label>
+      <input id="phone" name="phone" inputmode="tel" autocomplete="tel" placeholder="254712345678" required>
+      <button class="btn" type="submit">Get pairing code</button>
+      <p class="note">In WhatsApp: Settings → Linked devices → Link a device → Link with phone number instead, then type the code.</p>
+    </form>
+
+    <div id="panel-qr" role="tabpanel" aria-labelledby="tab-qr" hidden>
+      <button class="btn" id="qrBtn" type="button">Generate QR code</button>
+      <p class="note">In WhatsApp: Settings → Linked devices → Link a device, then scan the code.</p>
+    </div>
+
+    <p class="note warn">Only link a WhatsApp number you own. While the bot is unpaired, anyone who has a code or QR can link it.</p>
+
+    <p id="empty" class="empty">No active pairings yet.</p>
+    <div id="cards"></div>
+  </section>
+</div>
+
+<template id="card-tpl">
+  <article class="card">
+    <div class="card-head">
+      <span class="card-title"></span>
+      <span class="badge"></span>
+    </div>
+    <div class="code-row" hidden>
+      <span class="code"></span>
+      <button class="icon-btn copy" type="button" aria-label="Copy code" title="Copy code"></button>
+    </div>
+    <div class="qr-wrap" hidden><img alt="WhatsApp QR code"></div>
+    <p class="hint"></p>
+    <div class="card-foot">
+      <span class="timer"></span>
+      <button class="link cancel" type="button">Cancel</button>
+    </div>
+  </article>
+</template>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const $ = sel => document.querySelector(sel);
+  const FINAL = new Set(['linked', 'failed', 'expired', 'cancelled']);
+  const LABELS = {
+    starting: 'Starting…', waiting: 'Waiting for you', linked: 'Linked ✓',
+    failed: 'Failed', expired: 'Expired', cancelled: 'Cancelled',
+  };
+  const ICON_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+  const cards = new Map(); // id -> { el, view, poll }
+  let connected = false;
+
+  function toast(message) {
+    const t = $('#toast');
+    t.textContent = message;
+    t.classList.add('show');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => t.classList.remove('show'), 2600);
+  }
+
+  function showError(title, message) {
+    $('#errorTitle').textContent = title;
+    $('#errorText').textContent = message;
+    $('#errorAlert').hidden = false;
+    clearTimeout(showError.timer);
+    showError.timer = setTimeout(() => { $('#errorAlert').hidden = true; }, 8000);
+  }
+
+  function setConnected(isConnected) {
+    connected = isConnected;
+    $('#connectedAlert').hidden = !isConnected;
+    const pill = $('#botPill');
+    pill.textContent = isConnected ? 'Bot connected ✓' : 'Not connected';
+    pill.className = 'pill' + (isConnected ? ' ok' : '');
+    document.querySelectorAll('.btn').forEach(b => { b.disabled = isConnected; });
+  }
+
+  async function api(path, options = {}) {
+    const res = await fetch(path, {
+      ...options,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.error || `Request failed (${res.status})`);
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  }
+
+  function formatLeft(ms) {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  function hintFor(v) {
+    if (v.status === 'linked') return 'Linked! The bot is starting with this account.';
+    if (FINAL.has(v.status)) return v.error || LABELS[v.status];
+    if (v.type === 'code') {
+      return v.code
+        ? 'Type this code in WhatsApp now. Codes expire quickly.'
+        : 'Asking WhatsApp for a code…';
+    }
+    return v.qr
+      ? 'Scan with WhatsApp: Linked devices → Link a device.'
+      : 'Preparing QR code…';
+  }
+
+  function renderTimer(c) {
+    const timer = c.el.querySelector('.timer');
+    if (FINAL.has(c.view.status)) {
+      timer.textContent = '';
+      return;
+    }
+    const left = c.view.expiresAt - Date.now();
+    timer.textContent = left > 0 ? `Expires in ${formatLeft(left)}` : 'Expiring…';
+  }
+
+  function update(view) {
+    const c = cards.get(view.id);
+    if (!c) return;
+    c.view = view;
+    const el = c.el;
+
+    el.querySelector('.card-title').textContent =
+      view.type === 'code' ? `Code · +${view.phone}` : 'QR code';
+
+    const badge = el.querySelector('.badge');
+    badge.textContent = LABELS[view.status] || view.status;
+    badge.className = `badge ${view.status}`;
+
+    const codeRow = el.querySelector('.code-row');
+    codeRow.hidden = !view.code;
+    el.querySelector('.code').textContent = view.code || '';
+
+    const qrWrap = el.querySelector('.qr-wrap');
+    qrWrap.hidden = !(view.type === 'qr' && view.qr);
+    if (view.qr) qrWrap.querySelector('img').src = view.qr;
+
+    el.querySelector('.hint').textContent = hintFor(view);
+    el.querySelector('.cancel').textContent = FINAL.has(view.status) ? 'Remove' : 'Cancel';
+
+    renderTimer(c);
+
+    if (view.status === 'linked') {
+      toast('Linked! The bot is connecting now.');
+      refreshStatus();
+    }
+  }
+
+  function stopPoll(id) {
+    const c = cards.get(id);
+    if (c && c.poll) {
+      clearInterval(c.poll);
+      c.poll = null;
+    }
+  }
+
+  function startPoll(id) {
+    const c = cards.get(id);
+    if (!c || c.poll) return;
+    c.poll = setInterval(async () => {
+      try {
+        const v = await api(`/api/sessions/${id}`);
+        update(v);
+        if (FINAL.has(v.status)) stopPoll(id);
+      } catch (err) {
+        if (err.status === 404) stopPoll(id);
+      }
+    }, 2000);
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    }
+  }
+
+  async function copyCode(btn, id) {
+    const c = cards.get(id);
+    const text = c && c.view.code;
+    if (!text) return;
+    const ok = await copyText(text);
+    if (!ok) {
+      toast('Copy failed. Select the code and copy it manually.');
+      return;
+    }
+    btn.innerHTML = ICON_CHECK;
+    btn.classList.add('done');
+    btn.setAttribute('aria-label', 'Copied');
+    toast('Code copied');
+    setTimeout(() => {
+      btn.innerHTML = ICON_COPY;
+      btn.classList.remove('done');
+      btn.setAttribute('aria-label', 'Copy code');
+    }, 1600);
+  }
+
+  async function cancel(id) {
+    const c = cards.get(id);
+    if (!c) return;
+    if (FINAL.has(c.view.status)) {
+      stopPoll(id);
+      c.el.remove();
+      cards.delete(id);
+      $('#empty').hidden = cards.size > 0;
+      return;
+    }
+    try {
+      const v = await api(`/api/sessions/${id}`, { method: 'DELETE' });
+      update(v);
+      stopPoll(id);
+    } catch (err) {
+      toast(err.message);
+    }
+  }
+
+  function addCard(view) {
+    const node = $('#card-tpl').content.firstElementChild.cloneNode(true);
+    node.dataset.id = view.id;
+
+    const copyBtn = node.querySelector('.copy');
+    copyBtn.innerHTML = ICON_COPY;
+    copyBtn.addEventListener('click', () => copyCode(copyBtn, view.id));
+    node.querySelector('.cancel').addEventListener('click', () => cancel(view.id));
+
+    $('#cards').prepend(node);
+    cards.set(view.id, { el: node, view, poll: null });
+    $('#empty').hidden = true;
+    update(view);
+    startPoll(view.id);
+  }
+
+  async function create(path, body, button) {
+    if (connected) {
+      showError('Already connected', 'The bot is already connected to WhatsApp. Pairing is turned off.');
+      return;
+    }
+    button.disabled = true;
+    try {
+      const view = await api(path, { method: 'POST', body: JSON.stringify(body) });
+      addCard(view);
+      toast('Started. Your code or QR will appear in a few seconds.');
+    } catch (err) {
+      if (err.status === 409) {
+        setConnected(true);
+        showError('Already connected', err.message);
+      } else {
+        toast(err.message);
+      }
+    } finally {
+      button.disabled = connected;
+    }
+  }
+
+  $('#panel-code').addEventListener('submit', event => {
+    event.preventDefault();
+    const phone = $('#phone').value.replace(/\D/g, '');
+    if (!/^\d{8,15}$/.test(phone)) {
+      toast('Enter a valid number with country code, digits only.');
+      return;
+    }
+    create('/api/pair', { phone }, event.target.querySelector('button[type="submit"]'));
+  });
+
+  $('#qrBtn').addEventListener('click', event => {
+    create('/api/qr', {}, event.currentTarget);
+  });
+
+  function showTab(which) {
+    const isCode = which === 'code';
+    $('#tab-code').setAttribute('aria-selected', String(isCode));
+    $('#tab-qr').setAttribute('aria-selected', String(!isCode));
+    $('#panel-code').hidden = !isCode;
+    $('#panel-qr').hidden = isCode;
+  }
+  $('#tab-code').addEventListener('click', () => showTab('code'));
+  $('#tab-qr').addEventListener('click', () => showTab('qr'));
+
+  async function refreshStatus() {
+    try {
+      const s = await api('/api/status');
+      setConnected(Boolean(s.connected));
+      if (!s.connected) {
+        $('#botPill').textContent = `Not connected · ${s.active} active`;
+      }
+    } catch {}
+  }
+
+  refreshStatus();
+  setInterval(refreshStatus, 5000);
+  setInterval(() => cards.forEach(renderTimer), 1000);
+})();
+</script>
+</body>
+</html>
